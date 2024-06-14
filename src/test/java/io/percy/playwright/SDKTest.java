@@ -24,7 +24,7 @@ public class SDKTest {
     public static void testSetup() throws IOException {
         TestServer.startServer();
         Playwright playwright = Playwright.create();
-        browser = playwright.firefox().launch(new BrowserType.LaunchOptions().setHeadless(false));
+        browser = playwright.firefox().launch(new BrowserType.LaunchOptions().setHeadless(true));
         context = browser.newContext();
         page = context.newPage();
         percy = new Percy(page);
