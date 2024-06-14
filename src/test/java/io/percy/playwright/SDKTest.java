@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import org.mockito.ArgumentCaptor;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class SDKTest {
     private static final String TEST_URL = "http://localhost:8000";
     private static Browser browser;
@@ -42,12 +43,14 @@ public class SDKTest {
     }
 
     @Test
+    @Order(1)
     public void takesLocalAppSnapshotWithProvidedName() {
         page.navigate(TEST_URL);
         percy.snapshot("Snapshot with provided name");
     }
 
     @Test
+    @Order(2)
     public void snapshotWithOptions() {
         page.navigate("https://example.com");
         Map<String, Object> options = new HashMap<String, Object>();
@@ -59,6 +62,7 @@ public class SDKTest {
     }
 
     @Test
+    @Order(3)
     public void takeSnapshotWithSyncCLI() {
         page.navigate("https://example.com");
         Map<String, Object> options = new HashMap<>();
@@ -72,6 +76,7 @@ public class SDKTest {
     }
 
     @Test
+    @Order(4)
     public void takesMultipleSnapshotsInOneTestCase() {
         page.navigate(TEST_URL);
 
@@ -84,6 +89,7 @@ public class SDKTest {
     }
 
     @Test
+    @Order(5)
     public void takeSnapshotThrowErrorForPOA() {
         percy.sessionType = "automate";
         Throwable exception = assertThrows(RuntimeException.class, () -> percy.snapshot("Test"));
@@ -91,6 +97,7 @@ public class SDKTest {
     }
 
     @Test
+    @Order(6)
     public void takeScreenshotThrowErrorForWeb() throws Exception {
         Playwright playwright = Playwright.create();
         Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
@@ -107,6 +114,7 @@ public class SDKTest {
     }
 
     @Test
+    @Order(7)
     public void takeScreenshot() throws Exception {
         // Mock Page and dependencies
         Page mockPage = Mockito.mock(Page.class);
@@ -159,6 +167,7 @@ public class SDKTest {
     }
 
     @Test
+    @Order(8)
     public void takeScreenshotWithOptions() throws Exception {
         // Mock Page and dependencies
         Page mockPage = Mockito.mock(Page.class);
