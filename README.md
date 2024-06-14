@@ -68,13 +68,20 @@ $ percy exec -- [java test command]
 
 ## Configuration
 
-`percy.snapshot(driver, name[, **kwargs])`
+The snapshot method arguments:
 
-- `page` (**required**) - A playwright page instance
+`percy.snapshot(name, widths[], minHeight, enableJavaScript, percyCSS, scope)`
+
 - `name` (**required**) - The snapshot name; must be unique to each snapshot
-- `**kwargs` - [See per-snapshot configuration options](https://docs.percy.io/docs/cli-configuration#per-snapshot-configuration)
+- Additional snapshot options (overrides any project options):
+    - `widths` - An array of widths to take screenshots at
+    - `minHeight` - The minimum viewport height to take screenshots at
+    - `enableJavaScript` - Enable JavaScript in Percy's rendering environment
+    - `percyCSS` - Percy specific CSS only applied in Percy's rendering
+      environment
+    - `scope` - A CSS selector to scope the screenshot to
 
-
+    
 ## Percy on Automate
 
 ## Usage
@@ -109,3 +116,67 @@ public class Example {
     }
 }
 ```
+
+- `page` (**required**) - A playwright page instance
+- `name` (**required**) - The screenshot name; must be unique to each screenshot
+- `options` (**optional**) - There are various options supported by percy.screenshot to server further functionality.
+    - `sync` - Boolean value by default it falls back to false, Gives the processed result around screenshot [From CLI v1.28.0-beta.0+]
+    - `fullPage` - Boolean value by default it falls back to `false`, Takes full page screenshot [From CLI v1.27.6+]
+    - `freezeAnimatedImage` - Boolean value by default it falls back to `false`, you can pass `true` and percy will freeze image based animations.
+    - `freezeImageBySelectors` - List of selectors. Images will be freezed which are passed using selectors. For this to work `freezeAnimatedImage` must be set to true.
+    - `freezeImageByXpaths` - List of xpaths. Images will be freezed which are passed using xpaths. For this to work `freezeAnimatedImage` must be set to true.
+    - `percyCSS` - Custom CSS to be added to DOM before the screenshot being taken. Note: This gets removed once the screenshot is taken.
+    - `ignoreRegionXpaths` - List of xpaths. elements in the DOM can be ignored using xpath
+    - `ignoreRegionSelectors` - List of selectors. elements in the DOM can be ignored using selectors.
+    - `customIgnoreRegions` - List of custom objects. elements can be ignored using custom boundaries
+        - Refer to example -
+            - ```
+          List<HashMap> customRegion = new ArrayList<>();
+          HashMap<String, Integer> region1 = new HashMap<>();
+          region1.put("top", 10);
+          region1.put("bottom", 110);
+          region1.put("right", 10);
+          region1.put("left", 120);
+          customRegion.add(region1);
+          options.put("custom_ignore_regions", customRegion);
+        ```
+        - Parameters:
+            - `top` (int): Top coordinate of the ignore region.
+            - `bottom` (int): Bottom coordinate of the ignore region.
+            - `left` (int): Left coordinate of the ignore region.
+            - `right` (int): Right coordinate of the ignore region.
+    - `considerRegionXpaths` - List of xpaths. elements in the DOM can be considered for diffing and will be ignored by Intelli Ignore using xpaths.
+    - `considerRegionSelectors` - List of selectors. elements in the DOM can be considered for diffing and will be ignored by Intelli Ignore using selectors.
+    - `customConsiderRegions` - List of custom objects. elements can be considered for diffing and will be ignored by Intelli Ignore using custom boundaries
+        - Refer to example -
+            - ```
+          List<HashMap> customRegion = new ArrayList<>();
+          HashMap<String, Integer> region2 = new HashMap<>();
+          region2.put("top", 10);
+          region2.put("bottom", 110);
+          region2.put("right", 10);
+          region2.put("left", 120);
+          customRegion.add(region2);
+          options.put("custom_consider_regions", customRegion);
+        ```
+            - Parameters:
+                - `top` (int): Top coordinate of the consider region.
+                - `bottom` (int): Bottom coordinate of the consider region.
+                - `left` (int): Left coordinate of the consider region.
+                - `right` (int): Right coordinate of the consider region.
+
+### Creating Percy on automate build
+Note: Automate Percy Token starts with `auto` keyword. The command can be triggered using `exec` keyword.
+```sh-session
+$ export PERCY_TOKEN=[your-project-token]
+$ percy exec -- [java test command]
+[percy] Percy has started!
+[percy] [Java example] : Starting automate screenshot ...
+[percy] Screenshot taken "Java example"
+[percy] Stopping percy...
+[percy] Finalized build #1: https://percy.io/[your-project]
+[percy] Done!
+```
+
+Refer to docs here: [Percy on Automate](https://docs.percy.io/docs/integrate-functional-testing-with-visual-testing)
+

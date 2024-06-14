@@ -9,6 +9,7 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.jetbrains.annotations.Nullable;
 import org.json.JSONObject;
 import java.util.*;
 import com.microsoft.playwright.*;
@@ -63,6 +64,135 @@ public class Percy {
     /**
      * Take a snapshot and upload it to Percy.
      *
+     * @param name      The human-readable name of the snapshot. Should be unique.
+     * @param widths    The browser widths at which you want to take the snapshot.
+     *                  In pixels.
+     */
+    public JSONObject snapshot(String name, @Nullable List<Integer> widths) {
+        if (!isPercyEnabled) { return null; }
+
+        Map<String, Object> options = new HashMap<String, Object>();
+        options.put("widths", widths);
+
+        return snapshot(name, options);
+    }
+
+    /**
+     * Take a snapshot and upload it to Percy.
+     *
+     * @param name      The human-readable name of the snapshot. Should be unique.
+     * @param widths    The browser widths at which you want to take the snapshot.
+     *                  In pixels.
+     * @param minHeight The minimum height of the resulting snapshot. In pixels.
+     */
+    public JSONObject snapshot(String name, List<Integer> widths, Integer minHeight) {
+        if (!isPercyEnabled) {
+            return null;
+        }
+
+        Map<String, Object> options = new HashMap<String, Object>();
+        options.put("widths", widths);
+        options.put("minHeight", minHeight);
+
+        return snapshot(name, options);
+    }
+
+    /**
+     * Take a snapshot and upload it to Percy.
+     *
+     * @param name      The human-readable name of the snapshot. Should be unique.
+     * @param widths    The browser widths at which you want to take the snapshot.
+     *                  In pixels.
+     * @param minHeight The minimum height of the resulting snapshot. In pixels.
+     * @param enableJavaScript  Enable JavaScript in the Percy rendering environment
+     *
+     */
+    public JSONObject snapshot(String name, List<Integer> widths, Integer minHeight, boolean enableJavaScript) {
+        if (!isPercyEnabled) { return null; }
+
+        Map<String, Object> options = new HashMap<String, Object>();
+        options.put("widths", widths);
+        options.put("minHeight", minHeight);
+        options.put("enableJavaScript", enableJavaScript);
+
+        return snapshot(name, options);
+    }
+
+    /**
+     * Take a snapshot and upload it to Percy.
+     *
+     * @param name      The human-readable name of the snapshot. Should be unique.
+     * @param widths    The browser widths at which you want to take the snapshot.
+     *                  In pixels.
+     * @param minHeight The minimum height of the resulting snapshot. In pixels.
+     * @param enableJavaScript Enable JavaScript in the Percy rendering environment
+     * @param percyCSS Percy specific CSS that is only applied in Percy's browsers
+     */
+    public JSONObject snapshot(String name, @Nullable List<Integer> widths, Integer minHeight, boolean enableJavaScript, String percyCSS) {
+        if (!isPercyEnabled) { return null; }
+
+        Map<String, Object> options = new HashMap<String, Object>();
+        options.put("widths", widths);
+        options.put("minHeight", minHeight);
+        options.put("enableJavaScript", enableJavaScript);
+        options.put("percyCSS", percyCSS);
+
+        return snapshot(name, options);
+    }
+
+    /**
+     * Take a snapshot and upload it to Percy.
+     *
+     * @param name      The human-readable name of the snapshot. Should be unique.
+     * @param widths    The browser widths at which you want to take the snapshot.
+     *                  In pixels.
+     * @param minHeight The minimum height of the resulting snapshot. In pixels.
+     * @param enableJavaScript Enable JavaScript in the Percy rendering environment
+     * @param percyCSS Percy specific CSS that is only applied in Percy's browsers
+     * @param scope    A CSS selector to scope the screenshot to
+     */
+    public JSONObject snapshot(String name, @Nullable List<Integer> widths, Integer minHeight, boolean enableJavaScript, String percyCSS, String scope) {
+        if (!isPercyEnabled) { return null; }
+
+        Map<String, Object> options = new HashMap<String, Object>();
+        options.put("widths", widths);
+        options.put("minHeight", minHeight);
+        options.put("enableJavaScript", enableJavaScript);
+        options.put("percyCSS", percyCSS);
+        options.put("scope", scope);
+
+        return snapshot(name, options);
+    }
+
+    /**
+     * Take a snapshot and upload it to Percy.
+     *
+     * @param name      The human-readable name of the snapshot. Should be unique.
+     * @param widths    The browser widths at which you want to take the snapshot.
+     *                  In pixels.
+     * @param minHeight The minimum height of the resulting snapshot. In pixels.
+     * @param enableJavaScript Enable JavaScript in the Percy rendering environment
+     * @param percyCSS Percy specific CSS that is only applied in Percy's browsers
+     * @param scope    A CSS selector to scope the screenshot to
+     * @param sync     A boolean flag to get snapshot details
+     */
+    public JSONObject snapshot(String name, @Nullable List<Integer> widths, Integer minHeight, boolean enableJavaScript, String percyCSS, String scope, @Nullable Boolean sync) {
+        if (!isPercyEnabled) { return null; }
+
+        Map<String, Object> options = new HashMap<String, Object>();
+        options.put("widths", widths);
+        options.put("minHeight", minHeight);
+        options.put("enableJavaScript", enableJavaScript);
+        options.put("percyCSS", percyCSS);
+        options.put("scope", scope);
+        options.put("sync", sync);
+
+        return snapshot(name, options);
+    }
+
+    /**
+     * Take a snapshot and upload it to Percy.
+     *
      * @param name      The human-readable name of the screenshot. Should be unique.
      * @param options   Extra options
      */
@@ -72,8 +202,8 @@ public class Percy {
 
         Map<String, Object> domSnapshot = null;
         try {
-            this.page.evaluate(fetchPercyDOM());
-            domSnapshot = (Map<String, Object>) this.page.evaluate(buildSnapshotJS(options));
+            page.evaluate(fetchPercyDOM());
+            domSnapshot = (Map<String, Object>) page.evaluate(buildSnapshotJS(options));
         } catch (Exception e) {
             if (PERCY_DEBUG) { log(e.getMessage()); }
         }
@@ -100,12 +230,12 @@ public class Percy {
     public JSONObject screenshot(String name, Map<String, Object> options) throws Exception {
         if (!isPercyEnabled) { return null; }
         if ("web".equals(sessionType)) { throw new RuntimeException("Invalid function call - screenshot(). Please use snapshot() function for taking screenshot. screenshot() should be used only while using Percy with Automate. For more information on usage of snapshot(), refer doc for your language https://docs.percy.io/docs/end-to-end-testing"); }
-        this.setPageMetadata();
+        setPageMetadata();
         JSONObject json = new JSONObject();
-        json.put("sessionId", this.pageMetadata.getSessionId());
-        json.put("pageGuid", this.pageMetadata.getPageGuid());
-        json.put("frameGuid", this.pageMetadata.getFrameGuid());
-        json.put("framework", this.pageMetadata.getFramework());
+        json.put("sessionId", pageMetadata.getSessionId());
+        json.put("pageGuid", pageMetadata.getPageGuid());
+        json.put("frameGuid", pageMetadata.getFrameGuid());
+        json.put("framework", pageMetadata.getFramework());
         json.put("snapshotName", name);
         json.put("options", options);
         json.put("clientInfo", env.getClientInfo());
@@ -118,11 +248,8 @@ public class Percy {
      *
      * @param domSnapshot Stringified & serialized version of the site/applications DOM
      * @param name        The human-readable name of the snapshot. Should be unique.
-     * @param widths      The browser widths at which you want to take the snapshot.
-     *                    In pixels.
-     * @param minHeight   The minimum height of the resulting snapshot. In pixels.
-     * @param enableJavaScript Enable JavaScript in the Percy rendering environment
-     * @param percyCSS Percy specific CSS that is only applied in Percy's browsers
+     * @param url         The url of current website
+     * @param options     Map of various options support in percySnapshot Command.
      */
     private JSONObject postSnapshot(
             Map<String, Object> domSnapshot,
