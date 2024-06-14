@@ -21,7 +21,6 @@ public class PageMetadata extends Exception {
     private String browserGuid = null;
     private  String sessionId = null;
     private Map<String, Object> sessionDetails;
-    private String hashedSessionIdKey = "hashedSessionIdKey";
 
     public PageMetadata(Page page) {
         this.pageGuid = null;
