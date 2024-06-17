@@ -29,6 +29,13 @@
         </developer>
     </developers>
 
+    <scm>
+        <connection>scm:git:git://github.com/percy/percy-playwright-java.git</connection>
+        <developerConnection>scm:git:https://github.com/percy/percy-playwright-java.git</developerConnection>
+        <url>https://github.com/percy/percy-playwright-java/tree/master</url>
+        <tag>v1.0.0-beta.0</tag>
+    </scm>
+
     <properties>
         <maven.compiler.source>20</maven.compiler.source>
         <maven.compiler.target>20</maven.compiler.target>
