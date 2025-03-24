@@ -220,4 +220,51 @@ public class SDKTest {
         assertEquals(json.getString("framework"), capturedJson.getString("framework"));
         assertTrue(json.getJSONObject("options").similar(capturedJson.getJSONObject("options")));
     }
+    @Test
+    @Order(9)
+    public void createRegionTest() {
+        // Setup the parameters for the region
+        Map<String, Object> params = new HashMap<>();
+        params.put("boundingBox", "100,100,200,200");
+        params.put("elementXpath", "//div[@id='test']");
+        params.put("elementCSS", ".test-class");
+        params.put("padding", 10);
+        params.put("algorithm", "standard");
+        params.put("diffSensitivity", 0.5);
+        params.put("imageIgnoreThreshold", 0.2);
+        params.put("carouselsEnabled", true);
+        params.put("bannersEnabled", false);
+        params.put("adsEnabled", true);
+        params.put("diffIgnoreThreshold", 0.1);
+
+        // Call the method to create the region
+        Map<String, Object> region = percy.createRegion(params);
+
+        // Validate the returned region
+        assertNotNull(region);
+        
+        // Check if elementSelector was added correctly
+        Map<String, Object> elementSelector = (Map<String, Object>) region.get("elementSelector");
+        assertNotNull(elementSelector);
+        assertEquals("100,100,200,200", elementSelector.get("boundingBox"));
+        assertEquals("//div[@id='test']", elementSelector.get("elementXpath"));
+        assertEquals(".test-class", elementSelector.get("elementCSS"));
+
+        // Validate algorithm and configuration
+        assertEquals("standard", region.get("algorithm"));
+        
+        Map<String, Object> configuration = (Map<String, Object>) region.get("configuration");
+        assertNotNull(configuration);
+        assertEquals(0.5, configuration.get("diffSensitivity"));
+        assertEquals(0.2, configuration.get("imageIgnoreThreshold"));
+        assertTrue((Boolean) configuration.get("carouselsEnabled"));
+        assertFalse((Boolean) configuration.get("bannersEnabled"));
+        assertTrue((Boolean) configuration.get("adsEnabled"));
+        
+        // Validate assertion
+        Map<String, Object> assertion = (Map<String, Object>) region.get("assertion");
+        assertNotNull(assertion);
+        assertEquals(0.1, assertion.get("diffIgnoreThreshold"));
+    }
+
 }
