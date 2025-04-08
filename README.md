@@ -17,7 +17,7 @@ Add percy-playwright-java to your project dependencies. If you're using Maven:
 <dependency>
   <groupId>io.percy</groupId>
   <artifactId>percy-playwright-java</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1-beta.0</version>
 </dependency>
 ```
 
@@ -209,7 +209,6 @@ public class Example {
 
         Map<String, Object> obj1 = new HashMap<>();
         obj1.put("elementSelector", elementSelector);
-        obj1.put("padding", padding);
         obj1.put("algorithm", "intelliignore");
         obj1.put("configuration", configuration);
         obj1.put("assertion", assertion);
