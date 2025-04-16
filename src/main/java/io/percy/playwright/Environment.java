@@ -6,7 +6,7 @@ import com.microsoft.playwright.Playwright;
  * Package-private class to compute Environment information.
  */
 class Environment {
-    private final static String SDK_VERSION = "1.0.1-beta.0";
+    private final static String SDK_VERSION = "1.0.1";
     private final static String SDK_NAME = "percy-playwright-java";
 
     public String getClientInfo() {

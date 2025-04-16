@@ -6,7 +6,7 @@
 
     <groupId>io.percy</groupId>
     <artifactId>percy-playwright-java</artifactId>
-    <version>1.0.1-beta.0</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <name>${project.groupId}:${project.artifactId}</name>
@@ -33,7 +33,7 @@
         <connection>scm:git:git://github.com/percy/percy-playwright-java.git</connection>
         <developerConnection>scm:git:https://github.com/percy/percy-playwright-java.git</developerConnection>
         <url>https://github.com/percy/percy-playwright-java/tree/master</url>
-        <tag>v1.0.1-beta.0</tag>
+        <tag>v1.0.1</tag>
     </scm>
 
     <properties>
