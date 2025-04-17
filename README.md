@@ -17,7 +17,7 @@ Add percy-playwright-java to your project dependencies. If you're using Maven:
 <dependency>
   <groupId>io.percy</groupId>
   <artifactId>percy-playwright-java</artifactId>
-  <version>1.0.1-beta.0</version>
+  <version>1.0.1</version>
 </dependency>
 ```
 
@@ -167,7 +167,7 @@ public class Example {
                 - `right` (int): Right coordinate of the consider region.
     - `regions` parameter that allows users to apply snapshot options to specific areas of the page. This parameter is an array where each object defines a custom region with configurations.
       - Parameters:
-        - `elementSelector` (optional)
+        - `elementSelector` (optional, only one of the following must be provided, if this is not provided then full page will be considered as region)
             - `boundingBox` (object): Defines the coordinates and size of the region.
               - `x` (number): X-coordinate of the region.
               - `y` (number): Y-coordinate of the region.
@@ -194,28 +194,23 @@ public class Example {
 ### Example Usage for regions
 
 ```
-        Map<String, Object> elementSelector = new HashMap<>();
-        elementSelector.put("elementCSS", ".ad-banner");
+        Map<String, Object> params = new HashMap<>();
+        params.put("elementXpath", "//div[@id='test']");
+        params.put("algorithm", "standard");
+        params.put("diffSensitivity", 3);
+        params.put("imageIgnoreThreshold", 0.2);
+        params.put("carouselsEnabled", true);
+        params.put("bannersEnabled", false);
+        params.put("adsEnabled", true);
+        params.put("diffIgnoreThreshold", 0.1);
 
-        Map<String, Object> configuration = new HashMap<>();
-        configuration.put("diffSensitivity", 2);
-        configuration.put("imageIgnoreThreshold", 0.2);
-        configuration.put("carouselsEnabled", true);
-        configuration.put("bannersEnabled", true);
-        configuration.put("adsEnabled", true);
-
-        Map<String, Object> assertion = new HashMap<>();
-        assertion.put("diffIgnoreThreshold", 0.4);
-
-        Map<String, Object> obj1 = new HashMap<>();
-        obj1.put("elementSelector", elementSelector);
-        obj1.put("algorithm", "intelliignore");
-        obj1.put("configuration", configuration);
-        obj1.put("assertion", assertion);
-
+        // Call the method to create the region
+        Map<String, Object> regions2 = percy.createRegion(params);
         List<Map<String, Object>> regions = Collections.singletonList(obj1);
+        Map<String, Object> options = new HashMap<>();
+        options.put("regions", regions);
 
-        percy.snapshot("Homepage", regions); 
+        percy.snapshot("Homepage", options); 
 
 ```
 
