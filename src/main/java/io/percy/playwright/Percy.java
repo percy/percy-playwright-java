@@ -299,7 +299,6 @@ public class Percy {
         if ("automate".equals(sessionType)) { throw new RuntimeException("Invalid function call - snapshot(). Please use screenshot() function while using Percy with Automate. For more information on usage of PercyScreenshot, refer https://www.browserstack.com/docs/percy/integrate/functional-and-visual"); }
 
         Object domSnapshot = null;
-        log("Taking snapshot: " + name);
         try {
             String percyDomScript = fetchPercyDOM();
             page.evaluate(percyDomScript);
