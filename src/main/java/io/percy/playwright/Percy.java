@@ -46,6 +46,10 @@ public class Percy {
     private static boolean PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE =
             "true".equalsIgnoreCase(System.getenv("PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE"));
 
+    // Whether to adjust the default height to account for browser chrome during responsive capture
+    private static boolean PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT =
+            "true".equalsIgnoreCase(System.getenv("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT"));
+
     // for logging
     private static String LABEL = "[\u001b[35m" + (PERCY_DEBUG ? "percy:java" : "percy") + "\u001b[39m]";
 
@@ -313,6 +317,10 @@ public class Percy {
                 domSnapshot = getSerializedDOM(cookies, percyDomScript, options);
             }
         } catch (Exception e) {
+            if(domSnapshot == null) {
+                log("Snapshot capture failed: " + e.getMessage());
+                return null;
+            }
             log(e.getMessage(), "debug");
         }
 
@@ -544,6 +552,34 @@ public class Percy {
     }
 
     /**
+     * Calculates the default height for responsive capture.
+     * When {@code PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT} is enabled, the height is adjusted
+     * to account for browser chrome: {@code window.outerHeight - window.innerHeight + minH}.
+     *
+     * @param currentHeight The current viewport height to use as a fallback.
+     * @param options       Snapshot options; may contain a {@code minHeight} override.
+     * @return The computed default height in pixels.
+     */
+    private int calculateDefaultHeight(int currentHeight, Map<String, Object> options) {
+        if (!PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT) {
+            return currentHeight;
+        }
+        try {
+            Object minHeightOption = options.get("minHeight");
+            int minHeight = (minHeightOption instanceof Number)
+                    ? ((Number) minHeightOption).intValue()
+                    : currentHeight;
+            Object result = page.evaluate("(minH) => window.outerHeight - window.innerHeight + minH", minHeight);
+            if (result instanceof Number) {
+                return ((Number) result).intValue();
+            }
+        } catch (Exception e) {
+            log("Failed to calculate default height: " + e.getMessage(), "debug");
+        }
+        return currentHeight;
+    }
+
+    /**
      * Fetches responsive width/height pairs from the Percy CLI {@code /percy/widths-config}
      * endpoint.  The optional {@code widths} list is forwarded as a query parameter so that
      * the CLI can merge user-supplied widths with its own configuration.
@@ -662,6 +698,7 @@ public class Percy {
         ViewportSize originalViewport = page.viewportSize();
         int currentWidth  = (originalViewport != null) ? originalViewport.width  : 1280;
         int currentHeight = (originalViewport != null) ? originalViewport.height : 720;
+        int defaultHeight = calculateDefaultHeight(currentHeight, options);
         int lastWindowWidth = currentWidth;
         int resizeCount = 0;
 
@@ -672,7 +709,7 @@ public class Percy {
             int width  = (int) widthHeight.get("width");
             int height = widthHeight.containsKey("height")
                     ? (int) widthHeight.get("height")
-                    : currentHeight;
+                    : defaultHeight;
 
             if (lastWindowWidth != width) {
                 resizeCount++;
