@@ -829,6 +829,9 @@ public class Percy {
 
         Map<String, Object> domSnapshot =
                 (Map<String, Object>) page.evaluate(buildSnapshotJS(options));
+        if (domSnapshot == null) {
+            throw new RuntimeException("DOM serialization returned null — PercyDOM.serialize() may not be loaded or returned undefined");
+        }
         Map<String, Object> mutableSnapshot = new HashMap<>(domSnapshot);
 
         // Process cross-origin iframes

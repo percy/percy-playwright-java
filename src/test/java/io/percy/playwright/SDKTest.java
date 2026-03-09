@@ -1,13 +1,16 @@
 package io.percy.playwright;
 
 import com.microsoft.playwright.*;
+import com.microsoft.playwright.options.Cookie;
 import org.json.JSONObject;
 import org.junit.jupiter.api.*;
 import org.mockito.Mockito;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -59,6 +62,16 @@ public class SDKTest {
         options.put("scope", "div");
         options.put("widths", Arrays.asList(768, 992, 1200));
         percy.snapshot("Site with options", options);
+    }
+
+    @Test
+    @Order(2)
+    public void snapshotWithResponsiveSnapshotCapture() {
+        page.navigate("https://howbigismybrowser.com");
+        Map<String, Object> options = new HashMap<>();
+        options.put("widths", Arrays.asList(768, 992, 1200));
+        options.put("responsiveSnapshotCapture", true);
+        percy.snapshot("Site with responsive snapshot capture", options);
     }
 
     @Test
@@ -220,6 +233,7 @@ public class SDKTest {
         assertEquals(json.getString("framework"), capturedJson.getString("framework"));
         assertTrue(json.getJSONObject("options").similar(capturedJson.getJSONObject("options")));
     }
+
     @Test
     @Order(9)
     public void createRegionTest() {
@@ -265,6 +279,232 @@ public class SDKTest {
         Map<String, Object> assertion = (Map<String, Object>) region.get("assertion");
         assertNotNull(assertion);
         assertEquals(0.1, assertion.get("diffIgnoreThreshold"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Responsive snapshot capture tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    @Order(11)
+    public void isCaptureResponsiveDOMReturnsTrueForSDKOption() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+        Percy percyInstance = new Percy(mockPage);
+
+        java.lang.reflect.Method method =
+                Percy.class.getDeclaredMethod("isCaptureResponsiveDOM", Map.class);
+        method.setAccessible(true);
+
+        Map<String, Object> options = new HashMap<>();
+        options.put("responsiveSnapshotCapture", true);
+
+        boolean result = (boolean) method.invoke(percyInstance, options);
+        assertTrue(result);
+    }
+
+    @Test
+    @Order(12)
+    public void isCaptureResponsiveDOMReturnsFalseWhenDeferUploadsEnabled() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+        Percy percyInstance = new Percy(mockPage);
+
+        JSONObject percyConfig = new JSONObject();
+        percyConfig.put("deferUploads", true);
+        JSONObject config = new JSONObject();
+        config.put("percy", percyConfig);
+
+        java.lang.reflect.Field cliConfigField = Percy.class.getDeclaredField("cliConfig");
+        cliConfigField.setAccessible(true);
+        cliConfigField.set(percyInstance, config);
+
+        java.lang.reflect.Method method =
+                Percy.class.getDeclaredMethod("isCaptureResponsiveDOM", Map.class);
+        method.setAccessible(true);
+
+        Map<String, Object> options = new HashMap<>();
+        options.put("responsiveSnapshotCapture", true);
+
+        boolean result = (boolean) method.invoke(percyInstance, options);
+        assertFalse(result, "deferUploads should take priority and disable responsive capture");
+    }
+
+    @Test
+    @Order(13)
+    public void isCaptureResponsiveDOMReturnsTrueFromCLIConfig() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+        Percy percyInstance = new Percy(mockPage);
+
+        JSONObject snapshotConfig = new JSONObject();
+        snapshotConfig.put("responsiveSnapshotCapture", true);
+        JSONObject config = new JSONObject();
+        config.put("snapshot", snapshotConfig);
+
+        java.lang.reflect.Field cliConfigField = Percy.class.getDeclaredField("cliConfig");
+        cliConfigField.setAccessible(true);
+        cliConfigField.set(percyInstance, config);
+
+        java.lang.reflect.Method method =
+                Percy.class.getDeclaredMethod("isCaptureResponsiveDOM", Map.class);
+        method.setAccessible(true);
+
+        // No SDK-level flag — should still return true because CLI config enables it
+        Map<String, Object> options = new HashMap<>();
+        boolean result = (boolean) method.invoke(percyInstance, options);
+        assertTrue(result, "CLI config responsiveSnapshotCapture should enable responsive capture");
+    }
+
+    // -------------------------------------------------------------------------
+    // Cookie capture tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    @Order(14)
+    @SuppressWarnings("unchecked")
+    public void cookiesAreCapturedInSerializedDOM() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+
+        Map<String, Object> domMap = new HashMap<>();
+        domMap.put("html", "<html></html>");
+        when(mockPage.evaluate(anyString())).thenReturn(domMap);
+        when(mockPage.url()).thenReturn("http://example.com");
+        when(mockPage.frames()).thenReturn(new ArrayList<>());
+
+        Percy percyInstance = new Percy(mockPage);
+
+        Cookie cookie = new Cookie("session", "abc123");
+        cookie.domain = "example.com";
+        cookie.path = "/";
+        cookie.expires = -1.0;
+        cookie.httpOnly = false;
+        cookie.secure = false;
+
+        java.lang.reflect.Method method =
+                Percy.class.getDeclaredMethod("getSerializedDOM", List.class, String.class, Map.class);
+        method.setAccessible(true);
+
+        Map<String, Object> result = (Map<String, Object>) method.invoke(
+                percyInstance, Arrays.asList(cookie), "// percy dom script", new HashMap<>());
+
+        assertNotNull(result);
+        assertNotNull(result.get("cookies"));
+
+        List<Map<String, Object>> cookies = (List<Map<String, Object>>) result.get("cookies");
+        assertEquals(1, cookies.size());
+        assertEquals("session", cookies.get(0).get("name"));
+        assertEquals("abc123", cookies.get(0).get("value"));
+        assertEquals("example.com", cookies.get(0).get("domain"));
+        assertEquals("/", cookies.get(0).get("path"));
+    }
+
+    @Test
+    @Order(15)
+    @SuppressWarnings("unchecked")
+    public void emptyCookieListIsAttachedWhenNoCookiesPresent() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+
+        Map<String, Object> domMap = new HashMap<>();
+        domMap.put("html", "<html></html>");
+        when(mockPage.evaluate(anyString())).thenReturn(domMap);
+        when(mockPage.url()).thenReturn("http://example.com");
+        when(mockPage.frames()).thenReturn(new ArrayList<>());
+
+        Percy percyInstance = new Percy(mockPage);
+
+        java.lang.reflect.Method method =
+                Percy.class.getDeclaredMethod("getSerializedDOM", List.class, String.class, Map.class);
+        method.setAccessible(true);
+
+        Map<String, Object> result = (Map<String, Object>) method.invoke(
+                percyInstance, new ArrayList<>(), "// percy dom script", new HashMap<>());
+
+        assertNotNull(result);
+        List<Map<String, Object>> cookies = (List<Map<String, Object>>) result.get("cookies");
+        assertNotNull(cookies);
+        assertEquals(0, cookies.size());
+    }
+
+    // -------------------------------------------------------------------------
+    // Cross-origin iframe capture tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    @Order(16)
+    @SuppressWarnings("unchecked")
+    public void corsIframesAreProcessedAndAttachedInSnapshot() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+        Frame mockFrame = Mockito.mock(Frame.class);
+
+        // Main page DOM
+        Map<String, Object> mainDomMap = new HashMap<>();
+        mainDomMap.put("html", "<html><body><iframe src='http://other.com/'></iframe></body></html>");
+        when(mockPage.evaluate(anyString())).thenReturn(mainDomMap);
+
+        // page.evaluate(js, frameUrl) returns percyElementId for the iframe match
+        Map<String, Object> iframeDataMap = new HashMap<>();
+        iframeDataMap.put("percyElementId", "percy-elem-1");
+        when(mockPage.evaluate(anyString(), any())).thenReturn(iframeDataMap);
+
+        when(mockPage.url()).thenReturn("http://example.com/page");
+        when(mockFrame.url()).thenReturn("http://other.com/");
+
+        // frame.evaluate: first call injects script (return ignored),
+        // second call serializes the frame DOM
+        Map<String, Object> iframeSnapshot = new HashMap<>();
+        iframeSnapshot.put("html", "<html>iframe content</html>");
+        when(mockFrame.evaluate(anyString()))
+                .thenReturn(null)           // inject percyDomScript
+                .thenReturn(iframeSnapshot); // PercyDOM.serialize(...)
+
+        when(mockPage.frames()).thenReturn(Arrays.asList(mockFrame));
+
+        Percy percyInstance = new Percy(mockPage);
+
+        java.lang.reflect.Method method =
+                Percy.class.getDeclaredMethod("getSerializedDOM", List.class, String.class, Map.class);
+        method.setAccessible(true);
+
+        Map<String, Object> result = (Map<String, Object>) method.invoke(
+                percyInstance, new ArrayList<>(), "// percy dom script", new HashMap<>());
+
+        assertNotNull(result);
+        assertNotNull(result.get("corsIframes"), "corsIframes key should be present");
+
+        List<Map<String, Object>> corsIframes = (List<Map<String, Object>>) result.get("corsIframes");
+        assertEquals(1, corsIframes.size());
+
+        Map<String, Object> capturedFrame = corsIframes.get(0);
+        assertEquals("http://other.com/", capturedFrame.get("frameUrl"));
+        assertNotNull(capturedFrame.get("iframeSnapshot"));
+        assertEquals("percy-elem-1",
+                ((Map<String, Object>) capturedFrame.get("iframeData")).get("percyElementId"));
+    }
+
+    @Test
+    @Order(17)
+    @SuppressWarnings("unchecked")
+    public void sameOriginFramesAreNotProcessedAsCorsIframes() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+        Frame mockSameOriginFrame = Mockito.mock(Frame.class);
+
+        Map<String, Object> mainDomMap = new HashMap<>();
+        mainDomMap.put("html", "<html><body></body></html>");
+        when(mockPage.evaluate(anyString())).thenReturn(mainDomMap);
+        when(mockPage.url()).thenReturn("http://example.com/page");
+        // Same origin as the page — should not be treated as cross-origin
+        when(mockSameOriginFrame.url()).thenReturn("http://example.com/iframe");
+        when(mockPage.frames()).thenReturn(Arrays.asList(mockSameOriginFrame));
+
+        Percy percyInstance = new Percy(mockPage);
+
+        java.lang.reflect.Method method =
+                Percy.class.getDeclaredMethod("getSerializedDOM", List.class, String.class, Map.class);
+        method.setAccessible(true);
+
+        Map<String, Object> result = (Map<String, Object>) method.invoke(
+                percyInstance, new ArrayList<>(), "// percy dom script", new HashMap<>());
+
+        assertNotNull(result);
+        assertNull(result.get("corsIframes"), "Same-origin frames must not be added to corsIframes");
     }
 
 }
