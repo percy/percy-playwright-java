@@ -29,6 +29,7 @@ This is an example test using the `percy.snapshot` function.
 // import ...
 import io.percy.playwright;
 
+
 public class Example {
     private static Browser browser;
     private static BrowserContext context;
