@@ -114,7 +114,7 @@ public class SDKTest {
     public void snapshotWithCorsIframe() {
         // cors-iframe.html embeds https://todomvc.com/examples/react/dist/ inside an iframe, making it
         // a genuine cross-origin frame for Percy to detect and capture.
-        List<String> allowedHostnames = Arrays.asList("*");
+        List<String> allowedHostnames = Arrays.asList("todomvc.com");
         Map<String, Object> discoveryOptions = new HashMap<>();
         discoveryOptions.put("allowedHostnames", allowedHostnames);
         Map<String, Object> percyOptions = new HashMap<>();
