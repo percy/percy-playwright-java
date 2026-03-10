@@ -928,7 +928,7 @@ public class Percy {
             logRequest.setEntity(entity);
             httpClient.execute(logRequest);
         } catch (Exception ex) {
-            if (PERCY_DEBUG) { System.out.println("Sending log to CLI Failed " + ex.toString()); }
+            if (PERCY_DEBUG) { System.out.println("Sending log to CLI failed: " + ex.toString()); }
         } finally {
             // Print to stdout unless it is a debug message and debug mode is off
             if (!"debug".equals(level) || PERCY_DEBUG) {
