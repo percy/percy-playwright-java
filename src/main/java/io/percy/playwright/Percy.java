@@ -729,7 +729,10 @@ public class Percy {
                 try {
                     int sleepMs = Integer.parseInt(RESPONSIVE_CAPTURE_SLEEP_TIME) * 1000;
                     if (sleepMs > 0) { Thread.sleep(sleepMs); }
-                } catch (InterruptedException | NumberFormatException ignored) { }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (NumberFormatException ignored) { }
             }
 
             Map<String, Object> domSnapshot = getSerializedDOM(cookies, percyDomScript, options);
