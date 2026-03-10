@@ -34,7 +34,7 @@ public class Percy {
     private String domJs = "";
 
     // Maybe get the CLI server address
-    private String PERCY_SERVER_ADDRESS = System.getenv().getOrDefault("PERCY_SERVER_ADDRESS", "http://localhost:5338");
+    private static String PERCY_SERVER_ADDRESS = System.getenv().getOrDefault("PERCY_SERVER_ADDRESS", "http://localhost:5338");
 
     // Determine if we're debug logging
     private static boolean PERCY_DEBUG = System.getenv().getOrDefault("PERCY_LOGLEVEL", "info").equals("debug");
@@ -567,14 +567,17 @@ public class Percy {
             return currentHeight;
         }
         try {
+            int minHeight = currentHeight;
             Object minHeightOption = options.get("minHeight");
-            int minHeight = (minHeightOption instanceof Number)
-                    ? ((Number) minHeightOption).intValue()
-                    : currentHeight;
-            Object result = page.evaluate("(minH) => window.outerHeight - window.innerHeight + minH", minHeight);
-            if (result instanceof Number) {
-                return ((Number) result).intValue();
+            if (minHeightOption instanceof Number) {
+                minHeight = ((Number) minHeightOption).intValue();
+            } else if (cliConfig.has("snapshot") && !cliConfig.isNull("snapshot")) {
+                JSONObject snapshotConfig = cliConfig.getJSONObject("snapshot");
+                if (snapshotConfig.has("minHeight") && !snapshotConfig.isNull("minHeight")) {
+                    minHeight = snapshotConfig.getInt("minHeight");
+                }
             }
+            return minHeight;
         } catch (Exception e) {
             log("Failed to calculate default height: " + e.getMessage(), "debug");
         }
@@ -923,8 +926,7 @@ public class Percy {
                 .build();
 
         try (CloseableHttpClient httpClient = HttpClients.custom().setDefaultRequestConfig(requestConfig).build()) {
-            HttpPost logRequest = new HttpPost(
-                    System.getenv().getOrDefault("PERCY_SERVER_ADDRESS", "http://localhost:5338") + "/percy/log");
+            HttpPost logRequest = new HttpPost(PERCY_SERVER_ADDRESS + "/percy/log");
             logRequest.setEntity(entity);
             httpClient.execute(logRequest);
         } catch (Exception ex) {
