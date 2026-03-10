@@ -525,7 +525,10 @@ public class Percy {
 
     /**
      * Determines whether responsive DOM capture should be performed for this snapshot.
-     * Defers to the CLI config first, then falls back to the per-snapshot option.
+     * Returns {@code true} if either the per-snapshot {@code responsiveSnapshotCapture} option
+     * or the CLI config's {@code snapshot.responsiveSnapshotCapture} flag is {@code true}.
+     * Always returns {@code false} when {@code percy.deferUploads} is enabled in the CLI config,
+     * since responsive capture is not supported in that mode.
      */
     private boolean isCaptureResponsiveDOM(Map<String, Object> options) {
         // Respect deferUploads: if enabled, responsive capture is not supported
