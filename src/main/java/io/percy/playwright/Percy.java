@@ -680,7 +680,7 @@ public class Percy {
      * @param options         Snapshot options (passed through to the DOM serializer).
      * @return A list of DOM snapshot maps, each annotated with its capture {@code width}.
      */
-    public List<Map<String, Object>> captureResponsiveDom(
+    private List<Map<String, Object>> captureResponsiveDom(
             List<Cookie> cookies,
             String percyDomScript,
             Map<String, Object> options) {
