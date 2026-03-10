@@ -316,11 +316,9 @@ public class Percy {
                 domSnapshot = getSerializedDOM(cookies, percyDomScript, options);
             }
         } catch (Exception e) {
-            if(domSnapshot == null) {
-                log("Snapshot capture failed: " + e.getMessage());
-                return null;
-            }
+            log("Snapshot capture failed: " + e.getMessage());
             log(e.getMessage(), "debug");
+            return null;
         }
 
         return postSnapshot(domSnapshot, name, page.url(), options);
