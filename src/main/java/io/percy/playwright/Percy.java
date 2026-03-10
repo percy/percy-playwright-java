@@ -842,8 +842,12 @@ public class Percy {
                     .filter(f -> {
                         String fUrl = f.url();
                         if ("about:blank".equals(fUrl) || fUrl.isEmpty()) { return false; }
+                        // If the page has no host (e.g., file:, data:), skip CORS detection
+                        if (pageHost == null) { return false; }
                         try {
-                            return !new URI(fUrl).getHost().equals(pageHost);
+                            String frameHost = new URI(fUrl).getHost();
+                            // Treat frames with no host as non-cross-origin
+                            return frameHost != null && !Objects.equals(frameHost, pageHost);
                         } catch (Exception e) {
                             return false;
                         }
