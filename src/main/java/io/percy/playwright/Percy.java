@@ -699,6 +699,7 @@ public class Percy {
         int currentHeight = (originalViewport != null) ? originalViewport.height : 720;
         int defaultHeight = calculateDefaultHeight(currentHeight, options);
         int lastWindowWidth = currentWidth;
+        int lastWindowHeight = currentHeight;
         int resizeCount = 0;
 
         // Inject the resize counter before iterating widths
@@ -710,10 +711,11 @@ public class Percy {
                     ? (int) widthHeight.get("height")
                     : defaultHeight;
 
-            if (lastWindowWidth != width) {
+            if (lastWindowWidth != width || lastWindowHeight != height) {
                 resizeCount++;
                 changeViewportAndWait(width, height, resizeCount);
                 lastWindowWidth = width;
+                lastWindowHeight = height;
             }
 
             if (PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE) {
@@ -735,8 +737,10 @@ public class Percy {
             domSnapshots.add(domSnapshot);
         }
 
-        // Restore original viewport
-        changeViewportAndWait(currentWidth, currentHeight, resizeCount + 1);
+        // Restore original viewport only if it was changed
+        if (lastWindowWidth != currentWidth || lastWindowHeight != currentHeight) {
+            changeViewportAndWait(currentWidth, currentHeight, resizeCount + 1);
+        }
 
         return domSnapshots;
     }
