@@ -65,30 +65,6 @@ public class SDKTest {
     }
 
     @Test
-    @Order(2)
-    public void snapshotWithResponsiveSnapshotCapture() {
-        page.navigate("https://howbigismybrowser.com");
-        Map<String, Object> options = new HashMap<>();
-        options.put("widths", Arrays.asList(768, 992, 1200));
-        options.put("responsiveSnapshotCapture", true);
-        percy.snapshot("Site with responsive snapshot capture", options);
-    }
-
-    @Test
-    @Order(3)
-    public void snapshotWithCorsIframe() {
-        // cors-iframe.html embeds https://todomvc.com/examples/react/dist/ inside an iframe, making it
-        // a genuine cross-origin frame for Percy to detect and capture.
-        List<String> allowedHostnames = Arrays.asList("*");
-        Map<String, Object> discoveryOptions = new HashMap<>();
-        discoveryOptions.put("allowedHostnames", allowedHostnames);
-        Map<String, Object> percyOptions = new HashMap<>();
-        percyOptions.put("discovery", discoveryOptions);
-        page.navigate(TEST_URL + "/cors-iframe.html");
-        percy.snapshot("Page with cross-origin iframe", percyOptions);
-    }
-
-    @Test
     @Order(3)
     public void takeSnapshotWithSyncCLI() {
         page.navigate("https://example.com");
@@ -125,6 +101,30 @@ public class SDKTest {
 
     @Test
     @Order(6)
+    public void snapshotWithResponsiveSnapshotCapture() {
+        page.navigate(TEST_URL + "/responsive-capture.html");
+        Map<String, Object> options = new HashMap<>();
+        options.put("widths", Arrays.asList(480, 680, 992, 1200));
+        options.put("responsiveSnapshotCapture", true);
+        percy.snapshot("Site with responsive snapshot capture", options);
+    }
+
+    @Test
+    @Order(7)
+    public void snapshotWithCorsIframe() {
+        // cors-iframe.html embeds https://todomvc.com/examples/react/dist/ inside an iframe, making it
+        // a genuine cross-origin frame for Percy to detect and capture.
+        List<String> allowedHostnames = Arrays.asList("*");
+        Map<String, Object> discoveryOptions = new HashMap<>();
+        discoveryOptions.put("allowedHostnames", allowedHostnames);
+        Map<String, Object> percyOptions = new HashMap<>();
+        percyOptions.put("discovery", discoveryOptions);
+        page.navigate(TEST_URL + "/cors-iframe.html");
+        percy.snapshot("Page with cross-origin iframe", percyOptions);
+    }
+
+    @Test
+    @Order(8)
     public void takeScreenshotThrowErrorForWeb() throws Exception {
         Playwright playwright = Playwright.create();
         Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
@@ -141,7 +141,7 @@ public class SDKTest {
     }
 
     @Test
-    @Order(7)
+    @Order(9)
     public void takeScreenshot() throws Exception {
         // Mock Page and dependencies
         Page mockPage = Mockito.mock(Page.class);
@@ -194,7 +194,7 @@ public class SDKTest {
     }
 
     @Test
-    @Order(8)
+    @Order(10)
     public void takeScreenshotWithOptions() throws Exception {
         // Mock Page and dependencies
         Page mockPage = Mockito.mock(Page.class);
@@ -249,7 +249,7 @@ public class SDKTest {
     }
 
     @Test
-    @Order(9)
+    @Order(11)
     public void createRegionTest() {
         // Setup the parameters for the region
         Map<String, Object> params = new HashMap<>();
@@ -300,7 +300,7 @@ public class SDKTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @Order(11)
+    @Order(12)
     public void isCaptureResponsiveDOMReturnsTrueForSDKOption() throws Exception {
         Page mockPage = Mockito.mock(Page.class);
         Percy percyInstance = new Percy(mockPage);
@@ -317,7 +317,7 @@ public class SDKTest {
     }
 
     @Test
-    @Order(12)
+    @Order(13)
     public void isCaptureResponsiveDOMReturnsFalseWhenDeferUploadsEnabled() throws Exception {
         Page mockPage = Mockito.mock(Page.class);
         Percy percyInstance = new Percy(mockPage);
@@ -343,7 +343,7 @@ public class SDKTest {
     }
 
     @Test
-    @Order(13)
+    @Order(14)
     public void isCaptureResponsiveDOMReturnsTrueFromCLIConfig() throws Exception {
         Page mockPage = Mockito.mock(Page.class);
         Percy percyInstance = new Percy(mockPage);
@@ -372,7 +372,7 @@ public class SDKTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @Order(14)
+    @Order(15)
     @SuppressWarnings("unchecked")
     public void cookiesAreCapturedInSerializedDOM() throws Exception {
         Page mockPage = Mockito.mock(Page.class);
@@ -411,7 +411,7 @@ public class SDKTest {
     }
 
     @Test
-    @Order(15)
+    @Order(16)
     @SuppressWarnings("unchecked")
     public void emptyCookieListIsAttachedWhenNoCookiesPresent() throws Exception {
         Page mockPage = Mockito.mock(Page.class);
@@ -442,7 +442,7 @@ public class SDKTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @Order(16)
+    @Order(17)
     @SuppressWarnings("unchecked")
     public void corsIframesAreProcessedAndAttachedInSnapshot() throws Exception {
         Page mockPage = Mockito.mock(Page.class);
@@ -494,7 +494,7 @@ public class SDKTest {
     }
 
     @Test
-    @Order(17)
+    @Order(18)
     @SuppressWarnings("unchecked")
     public void sameOriginFramesAreNotProcessedAsCorsIframes() throws Exception {
         Page mockPage = Mockito.mock(Page.class);

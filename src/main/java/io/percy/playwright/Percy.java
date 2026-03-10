@@ -39,7 +39,7 @@ public class Percy {
     // Determine if we're debug logging
     private static boolean PERCY_DEBUG = System.getenv().getOrDefault("PERCY_LOGLEVEL", "info").equals("debug");
 
-    // Optional sleep between responsive captures (milliseconds)
+    // Optional sleep between responsive captures (seconds)
     private static String RESPONSIVE_CAPTURE_SLEEP_TIME = System.getenv().getOrDefault("RESPONSIVE_CAPTURE_SLEEP_TIME", "");
 
     // Whether to reload the page between responsive captures
