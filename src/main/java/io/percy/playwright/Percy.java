@@ -57,7 +57,7 @@ public class Percy {
     protected String sessionType = null;
 
     // CLI config returned by healthcheck
-    private JSONObject cliConfig = new JSONObject();
+    JSONObject cliConfig = new JSONObject();
 
     // Is the Percy server running or not
     private boolean isPercyEnabled = healthcheck();
@@ -528,7 +528,7 @@ public class Percy {
      * Always returns {@code false} when {@code percy.deferUploads} is enabled in the CLI config,
      * since responsive capture is not supported in that mode.
      */
-    private boolean isCaptureResponsiveDOM(Map<String, Object> options) {
+    boolean isCaptureResponsiveDOM(Map<String, Object> options) {
         // Respect deferUploads: if enabled, responsive capture is not supported
         if (cliConfig.has("percy") && !cliConfig.isNull("percy")) {
             JSONObject percyProperty = cliConfig.getJSONObject("percy");
@@ -832,7 +832,7 @@ public class Percy {
      * @return A mutable snapshot map ready for posting to the Percy CLI.
      */
     @SuppressWarnings("unchecked")
-    private Map<String, Object> getSerializedDOM(
+    Map<String, Object> getSerializedDOM(
             List<Cookie> cookies,
             String percyDomScript,
             Map<String, Object> options) {

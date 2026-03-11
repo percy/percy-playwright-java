@@ -305,14 +305,10 @@ public class SDKTest {
         Page mockPage = Mockito.mock(Page.class);
         Percy percyInstance = new Percy(mockPage);
 
-        java.lang.reflect.Method method =
-                Percy.class.getDeclaredMethod("isCaptureResponsiveDOM", Map.class);
-        method.setAccessible(true);
-
         Map<String, Object> options = new HashMap<>();
         options.put("responsiveSnapshotCapture", true);
 
-        boolean result = (boolean) method.invoke(percyInstance, options);
+        boolean result = percyInstance.isCaptureResponsiveDOM(options);
         assertTrue(result);
     }
 
@@ -327,18 +323,12 @@ public class SDKTest {
         JSONObject config = new JSONObject();
         config.put("percy", percyConfig);
 
-        java.lang.reflect.Field cliConfigField = Percy.class.getDeclaredField("cliConfig");
-        cliConfigField.setAccessible(true);
-        cliConfigField.set(percyInstance, config);
-
-        java.lang.reflect.Method method =
-                Percy.class.getDeclaredMethod("isCaptureResponsiveDOM", Map.class);
-        method.setAccessible(true);
+        percyInstance.cliConfig = config;
 
         Map<String, Object> options = new HashMap<>();
         options.put("responsiveSnapshotCapture", true);
 
-        boolean result = (boolean) method.invoke(percyInstance, options);
+        boolean result = percyInstance.isCaptureResponsiveDOM(options);
         assertFalse(result, "deferUploads should take priority and disable responsive capture");
     }
 
@@ -353,17 +343,11 @@ public class SDKTest {
         JSONObject config = new JSONObject();
         config.put("snapshot", snapshotConfig);
 
-        java.lang.reflect.Field cliConfigField = Percy.class.getDeclaredField("cliConfig");
-        cliConfigField.setAccessible(true);
-        cliConfigField.set(percyInstance, config);
-
-        java.lang.reflect.Method method =
-                Percy.class.getDeclaredMethod("isCaptureResponsiveDOM", Map.class);
-        method.setAccessible(true);
+        percyInstance.cliConfig = config;
 
         // No SDK-level flag — should still return true because CLI config enables it
         Map<String, Object> options = new HashMap<>();
-        boolean result = (boolean) method.invoke(percyInstance, options);
+        boolean result = percyInstance.isCaptureResponsiveDOM(options);
         assertTrue(result, "CLI config responsiveSnapshotCapture should enable responsive capture");
     }
 
@@ -392,12 +376,8 @@ public class SDKTest {
         cookie.httpOnly = false;
         cookie.secure = false;
 
-        java.lang.reflect.Method method =
-                Percy.class.getDeclaredMethod("getSerializedDOM", List.class, String.class, Map.class);
-        method.setAccessible(true);
-
-        Map<String, Object> result = (Map<String, Object>) method.invoke(
-                percyInstance, Arrays.asList(cookie), "// percy dom script", new HashMap<>());
+        Map<String, Object> result = percyInstance.getSerializedDOM(
+                Arrays.asList(cookie), "// percy dom script", new HashMap<>());
 
         assertNotNull(result);
         assertNotNull(result.get("cookies"));
@@ -424,12 +404,8 @@ public class SDKTest {
 
         Percy percyInstance = new Percy(mockPage);
 
-        java.lang.reflect.Method method =
-                Percy.class.getDeclaredMethod("getSerializedDOM", List.class, String.class, Map.class);
-        method.setAccessible(true);
-
-        Map<String, Object> result = (Map<String, Object>) method.invoke(
-                percyInstance, new ArrayList<>(), "// percy dom script", new HashMap<>());
+        Map<String, Object> result = percyInstance.getSerializedDOM(
+                new ArrayList<>(), "// percy dom script", new HashMap<>());
 
         assertNotNull(result);
         List<Map<String, Object>> cookies = (List<Map<String, Object>>) result.get("cookies");
@@ -473,12 +449,8 @@ public class SDKTest {
 
         Percy percyInstance = new Percy(mockPage);
 
-        java.lang.reflect.Method method =
-                Percy.class.getDeclaredMethod("getSerializedDOM", List.class, String.class, Map.class);
-        method.setAccessible(true);
-
-        Map<String, Object> result = (Map<String, Object>) method.invoke(
-                percyInstance, new ArrayList<>(), "// percy dom script", new HashMap<>());
+        Map<String, Object> result = percyInstance.getSerializedDOM(
+                new ArrayList<>(), "// percy dom script", new HashMap<>());
 
         assertNotNull(result);
         assertNotNull(result.get("corsIframes"), "corsIframes key should be present");
@@ -510,12 +482,8 @@ public class SDKTest {
 
         Percy percyInstance = new Percy(mockPage);
 
-        java.lang.reflect.Method method =
-                Percy.class.getDeclaredMethod("getSerializedDOM", List.class, String.class, Map.class);
-        method.setAccessible(true);
-
-        Map<String, Object> result = (Map<String, Object>) method.invoke(
-                percyInstance, new ArrayList<>(), "// percy dom script", new HashMap<>());
+        Map<String, Object> result = percyInstance.getSerializedDOM(
+                new ArrayList<>(), "// percy dom script", new HashMap<>());
 
         assertNotNull(result);
         assertNull(result.get("corsIframes"), "Same-origin frames must not be added to corsIframes");
