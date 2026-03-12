@@ -228,4 +228,3 @@ $ percy exec -- [java test command]
 ```
 
 Refer to docs here: [Percy on Automate](https://www.browserstack.com/docs/percy/integrate/functional-and-visual)
-
