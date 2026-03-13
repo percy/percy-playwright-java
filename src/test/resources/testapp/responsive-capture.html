@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Snapshot Capture</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-glow {
+            box-shadow: 0 0 0 1px rgba(102,126,234,0.15), 0 8px 32px rgba(102,126,234,0.12);
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        }
+        .badge {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(4px);
+        }
+        .divider-v {
+            width: 1px;
+            background: rgba(255,255,255,0.2);
+            align-self: stretch;
+        }
+        #breakpoint-label {
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+    </style>
+</head>
+<body class="min-h-screen gradient-bg flex items-center justify-center p-6">
+
+    <div class="w-full max-w-2xl space-y-6">
+
+        <!-- Header card -->
+        <div class="bg-white rounded-2xl card-glow px-8 py-7 text-center space-y-2">
+            <div class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-indigo-500 bg-indigo-50 px-3 py-1 rounded-full mb-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0H3" />
+                </svg>
+                Percy Responsive Capture
+            </div>
+            <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Responsive Snapshot Testing</h1>
+            <p class="text-gray-500 text-sm leading-relaxed">
+                This page captures live viewport dimensions at each configured breakpoint for visual regression testing.
+            </p>
+        </div>
+
+        <!-- Viewport metrics card -->
+        <div class="metric-card rounded-2xl p-6 text-white space-y-5">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold uppercase tracking-widest text-indigo-300">Live Viewport</span>
+                <span id="breakpoint-label" class="badge text-xs font-semibold px-3 py-1 rounded-full text-white">—</span>
+            </div>
+
+            <div class="flex items-center justify-center gap-0 divide-x divide-white/10">
+                <!-- Width -->
+                <div class="flex-1 text-center px-6 py-2">
+                    <div class="text-indigo-300 text-xs font-semibold uppercase tracking-widest mb-1">Width</div>
+                    <div id="width" class="text-5xl font-extrabold tracking-tight text-white">—</div>
+                </div>
+                <!-- Divider -->
+                <div class="divider-v mx-0"></div>
+                <!-- Height -->
+                <div class="flex-1 text-center px-6 py-2">
+                    <div class="text-indigo-300 text-xs font-semibold uppercase tracking-widest mb-1">Height</div>
+                    <div id="height" class="text-5xl font-extrabold tracking-tight text-white">—</div>
+                </div>
+            </div>
+
+            <!-- Pixel ratio -->
+            <div class="flex items-center justify-center gap-2 pt-1 border-t border-white/10">
+                <svg class="w-3.5 h-3.5 text-indigo-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                </svg>
+                <span class="text-xs text-indigo-300 font-medium">Device Pixel Ratio: <span id="dpr" class="text-white font-semibold">—</span></span>
+            </div>
+        </div>
+
+        <!-- Breakpoint guide -->
+        <div class="bg-white rounded-2xl card-glow px-6 py-5 space-y-3">
+            <p class="text-xs font-semibold uppercase tracking-widest text-gray-400">Breakpoint Reference</p>
+            <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                <div class="bp-item rounded-lg px-2 py-2.5 bg-gray-50 border border-gray-100" data-min="0" data-max="639">
+                    <div class="font-bold text-gray-700">XS</div>
+                    <div class="text-gray-400 mt-0.5">&lt; 640px</div>
+                </div>
+                <div class="bp-item rounded-lg px-2 py-2.5 bg-gray-50 border border-gray-100" data-min="640" data-max="767">
+                    <div class="font-bold text-gray-700">SM</div>
+                    <div class="text-gray-400 mt-0.5">640 – 767px</div>
+                </div>
+                <div class="bp-item rounded-lg px-2 py-2.5 bg-gray-50 border border-gray-100" data-min="768" data-max="1023">
+                    <div class="font-bold text-gray-700">MD</div>
+                    <div class="text-gray-400 mt-0.5">768 – 1023px</div>
+                </div>
+                <div class="bp-item rounded-lg px-2 py-2.5 bg-gray-50 border border-gray-100" data-min="1024" data-max="99999">
+                    <div class="font-bold text-gray-700">LG+</div>
+                    <div class="text-gray-400 mt-0.5">&ge; 1024px</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const BREAKPOINTS = [
+            { label: 'XS  < 640px',    min: 0,    max: 639  },
+            { label: 'SM  640–767px',  min: 640,  max: 767  },
+            { label: 'MD  768–1023px', min: 768,  max: 1023 },
+            { label: 'LG+  ≥ 1024px', min: 1024, max: Infinity },
+        ];
+
+        function getBreakpoint(w) {
+            return BREAKPOINTS.find(b => w >= b.min && w <= b.max);
+        }
+
+        function updateInfo() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const bp = getBreakpoint(w);
+
+            document.getElementById('width').textContent  = `${w}px`;
+            document.getElementById('height').textContent = `${h}px`;
+            document.getElementById('dpr').textContent    = window.devicePixelRatio ?? '1';
+            document.getElementById('breakpoint-label').textContent = bp ? bp.label : '—';
+
+            // Highlight active breakpoint card
+            document.querySelectorAll('.bp-item').forEach(el => {
+                const min = parseInt(el.dataset.min, 10);
+                const max = parseInt(el.dataset.max, 10);
+                const active = w >= min && w <= max;
+                el.classList.toggle('bg-indigo-50',  active);
+                el.classList.toggle('border-indigo-300', active);
+                el.classList.toggle('bg-gray-50',   !active);
+                el.classList.toggle('border-gray-100', !active);
+                el.querySelectorAll('.font-bold, .text-gray-400').forEach(t => {
+                    t.classList.toggle('text-indigo-600', active && t.classList.contains('font-bold'));
+                    t.classList.toggle('text-gray-700',  !active && t.classList.contains('font-bold'));
+                    t.classList.toggle('text-indigo-400', active && t.classList.contains('text-gray-400'));
+                });
+            });
+        }
+
+        window.addEventListener('load', updateInfo);
+        window.addEventListener('resize', updateInfo);
+    </script>
+</body>
+</html>
