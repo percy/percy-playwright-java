@@ -17,7 +17,7 @@ Add percy-playwright-java to your project dependencies. If you're using Maven:
 <dependency>
   <groupId>io.percy</groupId>
   <artifactId>percy-playwright-java</artifactId>
-  <version>1.0.1</version>
+  <version>1.0.2-beta.0</version>
 </dependency>
 ```
 
