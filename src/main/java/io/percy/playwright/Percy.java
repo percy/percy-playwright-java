@@ -21,6 +21,9 @@ import java.util.stream.Collectors;
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.Cookie;
 import com.microsoft.playwright.options.ViewportSize;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 
 /**
@@ -302,6 +305,10 @@ public class Percy {
         try {
             String percyDomScript = fetchPercyDOM();
             page.evaluate(percyDomScript);
+
+            // Expose closed shadow roots via CDP before serialization so
+            // PercyDOM.serialize() can access them through the WeakMap
+            exposeClosedShadowRoots(page);
 
             List<Cookie> cookies = new ArrayList<>();
             try {
@@ -900,6 +907,97 @@ public class Percy {
         mutableSnapshot.put("cookies", cookiesList);
 
         return mutableSnapshot;
+    }
+
+    // -------------------------------------------------------------------------
+    // Closed Shadow DOM via CDP
+    // -------------------------------------------------------------------------
+
+    /**
+     * Use CDP to discover closed shadow roots and expose them to PercyDOM.serialize().
+     * Closed shadow roots are inaccessible from JS (element.shadowRoot === null),
+     * but CDP's DOM domain can pierce them.
+     */
+    private void exposeClosedShadowRoots(Page page) {
+        CDPSession cdpSession = null;
+        try {
+            cdpSession = page.context().newCDPSession(page);
+        } catch (Exception err) {
+            log("CDP session unavailable: " + err.getMessage(), "debug");
+            return;
+        }
+
+        try {
+            cdpSession.send("DOM.enable");
+
+            JsonObject docParams = new JsonObject();
+            docParams.addProperty("depth", -1);
+            docParams.addProperty("pierce", true);
+            JsonElement docResult = cdpSession.send("DOM.getDocument", docParams);
+            JsonObject root = docResult.getAsJsonObject().getAsJsonObject("root");
+
+            List<JsonObject> closedPairs = new ArrayList<>();
+            walkNodes(root, closedPairs);
+
+            if (closedPairs.isEmpty()) {
+                return;
+            }
+
+            log("Found " + closedPairs.size() + " closed shadow root(s), exposing via CDP", "debug");
+
+            page.evaluate("() => { window.__percyClosedShadowRoots = window.__percyClosedShadowRoots || new WeakMap(); }");
+
+            for (JsonObject pair : closedPairs) {
+                JsonObject resolveHost = new JsonObject();
+                resolveHost.addProperty("backendNodeId", pair.get("hostBackendNodeId").getAsInt());
+                JsonElement hostResult = cdpSession.send("DOM.resolveNode", resolveHost);
+                String hostObjectId = hostResult.getAsJsonObject().getAsJsonObject("object").get("objectId").getAsString();
+
+                JsonObject resolveShadow = new JsonObject();
+                resolveShadow.addProperty("backendNodeId", pair.get("shadowBackendNodeId").getAsInt());
+                JsonElement shadowResult = cdpSession.send("DOM.resolveNode", resolveShadow);
+                String shadowObjectId = shadowResult.getAsJsonObject().getAsJsonObject("object").get("objectId").getAsString();
+
+                JsonObject callParams = new JsonObject();
+                callParams.addProperty("functionDeclaration",
+                    "function(shadowRoot) { window.__percyClosedShadowRoots.set(this, shadowRoot); }");
+                callParams.addProperty("objectId", hostObjectId);
+                JsonArray args = new JsonArray();
+                JsonObject arg = new JsonObject();
+                arg.addProperty("objectId", shadowObjectId);
+                args.add(arg);
+                callParams.add("arguments", args);
+                cdpSession.send("Runtime.callFunctionOn", callParams);
+            }
+        } catch (Exception err) {
+            log("Could not expose closed shadow roots via CDP: " + err.getMessage(), "debug");
+        } finally {
+            if (cdpSession != null) {
+                try { cdpSession.detach(); } catch (Exception ignored) { }
+            }
+        }
+    }
+
+    private void walkNodes(JsonObject node, List<JsonObject> closedPairs) {
+        if (node.has("contentDocument")) return;
+
+        if (node.has("shadowRoots")) {
+            for (JsonElement srElem : node.getAsJsonArray("shadowRoots")) {
+                JsonObject sr = srElem.getAsJsonObject();
+                if (sr.has("shadowRootType") && "closed".equals(sr.get("shadowRootType").getAsString())) {
+                    JsonObject pair = new JsonObject();
+                    pair.addProperty("hostBackendNodeId", node.get("backendNodeId").getAsInt());
+                    pair.addProperty("shadowBackendNodeId", sr.get("backendNodeId").getAsInt());
+                    closedPairs.add(pair);
+                }
+                walkNodes(sr, closedPairs);
+            }
+        }
+        if (node.has("children")) {
+            for (JsonElement childElem : node.getAsJsonArray("children")) {
+                walkNodes(childElem.getAsJsonObject(), closedPairs);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
