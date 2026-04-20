@@ -489,4 +489,95 @@ public class SDKTest {
         assertNull(result.get("corsIframes"), "Same-origin frames must not be added to corsIframes");
     }
 
+    // -------------------------------------------------------------------------
+    // Readiness gate (PER-7348)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @Order(90)
+    @SuppressWarnings("unchecked")
+    public void readinessRunsBeforeSerializeAndAttachesDiagnostics() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+
+        Map<String, Object> domMap = new HashMap<>();
+        domMap.put("html", "<html></html>");
+
+        // Readiness path: page.evaluate(js, config) — any 2-arg call with a Map
+        Map<String, Object> diagnostics = new HashMap<>();
+        diagnostics.put("ok", true);
+        diagnostics.put("timed_out", false);
+        when(mockPage.evaluate(anyString(), any(Map.class))).thenReturn(diagnostics);
+
+        // Serialize path: single-arg evaluate (buildSnapshotJS)
+        when(mockPage.evaluate(anyString())).thenReturn(domMap);
+        when(mockPage.url()).thenReturn("http://example.com");
+        when(mockPage.frames()).thenReturn(new ArrayList<>());
+
+        Percy percyInstance = new Percy(mockPage);
+
+        Map<String, Object> result = percyInstance.getSerializedDOM(
+                new ArrayList<>(), "// percy dom script", new HashMap<>());
+
+        assertNotNull(result);
+        // waitForReady script was sent via the 2-arg evaluate overload
+        verify(mockPage, atLeastOnce()).evaluate(contains("waitForReady"), any(Map.class));
+        // Diagnostics propagated onto the domSnapshot
+        assertEquals(diagnostics, result.get("readiness_diagnostics"));
+    }
+
+    @Test
+    @Order(91)
+    @SuppressWarnings("unchecked")
+    public void readinessSkippedWhenPresetDisabled() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+
+        Map<String, Object> domMap = new HashMap<>();
+        domMap.put("html", "<html></html>");
+        when(mockPage.evaluate(anyString())).thenReturn(domMap);
+        when(mockPage.url()).thenReturn("http://example.com");
+        when(mockPage.frames()).thenReturn(new ArrayList<>());
+
+        Percy percyInstance = new Percy(mockPage);
+
+        Map<String, Object> disabled = new HashMap<>();
+        disabled.put("preset", "disabled");
+        Map<String, Object> options = new HashMap<>();
+        options.put("readiness", disabled);
+
+        Map<String, Object> result = percyInstance.getSerializedDOM(
+                new ArrayList<>(), "// percy dom script", options);
+
+        assertNotNull(result);
+        // Readiness evaluate(js, config) must NOT have been called
+        verify(mockPage, never()).evaluate(contains("waitForReady"), any(Map.class));
+        // Serialize still ran — and no diagnostics attached
+        assertNull(result.get("readiness_diagnostics"));
+    }
+
+    @Test
+    @Order(92)
+    @SuppressWarnings("unchecked")
+    public void snapshotSurvivesReadinessThrow() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+
+        Map<String, Object> domMap = new HashMap<>();
+        domMap.put("html", "<html></html>");
+
+        // 2-arg evaluate (readiness) blows up; 1-arg evaluate (serialize) still works
+        when(mockPage.evaluate(anyString(), any(Map.class))).thenThrow(new RuntimeException("readiness boom"));
+        when(mockPage.evaluate(anyString())).thenReturn(domMap);
+        when(mockPage.url()).thenReturn("http://example.com");
+        when(mockPage.frames()).thenReturn(new ArrayList<>());
+
+        Percy percyInstance = new Percy(mockPage);
+
+        Map<String, Object> result = percyInstance.getSerializedDOM(
+                new ArrayList<>(), "// percy dom script", new HashMap<>());
+
+        assertNotNull(result);
+        // domSnapshot was still built; no diagnostics attached
+        assertNull(result.get("readiness_diagnostics"));
+        assertEquals("<html></html>", result.get("html"));
+    }
+
 }

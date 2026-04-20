@@ -429,6 +429,50 @@ public class Percy {
     }
 
     /**
+     * Readiness gate: runs PercyDOM.waitForReady BEFORE serialize (PER-7348).
+     *
+     * Uses page.evaluate — Playwright auto-awaits Promises. The embedded JS
+     * checks typeof PercyDOM.waitForReady === 'function' so older CLI versions
+     * that lack the method are a graceful no-op.
+     *
+     * Readiness config precedence: options["readiness"] > cliConfig.snapshot.readiness
+     * > empty (CLI applies balanced default). If preset is "disabled", skip the
+     * evaluate call entirely. Any exception is swallowed at debug level — the
+     * serialize call still runs.
+     *
+     * @return Readiness diagnostics to attach to the domSnapshot, or null.
+     */
+    protected Object waitForReady(Map<String, Object> options) {
+        Object perSnapshot = options != null ? options.get("readiness") : null;
+        JSONObject readinessConfig;
+        if (perSnapshot instanceof Map) {
+            readinessConfig = new JSONObject((Map<?, ?>) perSnapshot);
+        } else if (perSnapshot instanceof JSONObject) {
+            readinessConfig = (JSONObject) perSnapshot;
+        } else {
+            JSONObject snapshotConfig = cliConfig.optJSONObject("snapshot");
+            readinessConfig = snapshotConfig == null ? new JSONObject()
+                    : snapshotConfig.optJSONObject("readiness");
+            if (readinessConfig == null) { readinessConfig = new JSONObject(); }
+        }
+        if ("disabled".equals(readinessConfig.optString("preset", null))) {
+            return null;
+        }
+        try {
+            String js =
+                "(cfg) => {"
+                + "  if (typeof PercyDOM !== 'undefined' && typeof PercyDOM.waitForReady === 'function') {"
+                + "    return PercyDOM.waitForReady(cfg);"
+                + "  }"
+                + "}";
+            return page.evaluate(js, readinessConfig.toMap());
+        } catch (Exception e) {
+            log("waitForReady failed, proceeding to serialize: " + e.getMessage(), "debug");
+            return null;
+        }
+    }
+
+    /**
      * Attempts to load dom.js from the local Percy server. Use cached value in `domJs`,
      * if it exists.
      *
@@ -837,12 +881,20 @@ public class Percy {
             String percyDomScript,
             Map<String, Object> options) {
 
+        // Readiness gate before serialize (PER-7348). Graceful on old CLI.
+        Object readinessDiagnostics = waitForReady(options);
+
         Map<String, Object> domSnapshot =
                 (Map<String, Object>) page.evaluate(buildSnapshotJS(options));
         if (domSnapshot == null) {
             throw new RuntimeException("DOM serialization returned null — PercyDOM.serialize() may not be loaded or returned undefined");
         }
         Map<String, Object> mutableSnapshot = new HashMap<>(domSnapshot);
+
+        // Attach readiness diagnostics so the CLI can log timing and pass/fail
+        if (readinessDiagnostics != null) {
+            mutableSnapshot.put("readiness_diagnostics", readinessDiagnostics);
+        }
 
         // Process cross-origin iframes
         try {
