@@ -71,6 +71,24 @@ public class PercySteps {
     public static void setPage(Page playwrightPage) {
         page = playwrightPage;
         percy = new Percy(page);
+
+        // Identify as Cucumber wrapper in Percy build info
+        String sdkVersion = Percy.getSdkVersion();
+        String cucumberVersion = getCucumberVersion();
+        percy.setClientInfo(
+            "percy-cucumber-java-playwright/" + sdkVersion,
+            "cucumber-java/" + cucumberVersion + "; playwright-java"
+        );
+    }
+
+    private static String getCucumberVersion() {
+        try {
+            Package pkg = io.cucumber.java.en.Given.class.getPackage();
+            String version = pkg != null ? pkg.getImplementationVersion() : null;
+            return version != null ? version : "unknown";
+        } catch (Exception e) {
+            return "unknown";
+        }
     }
 
     /**
