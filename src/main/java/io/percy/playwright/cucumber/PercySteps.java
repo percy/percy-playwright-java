@@ -282,6 +282,47 @@ public class PercySteps {
     }
 
     // ------------------------------------------------------------------
+    // When steps - Screenshot (Automate)
+    // ------------------------------------------------------------------
+
+    @When("I take a Percy screenshot named {string}")
+    public void iTakeScreenshot(String name) {
+        try {
+            percy.screenshot(name);
+        } catch (Exception e) {
+            throw new RuntimeException("Percy screenshot failed: " + e.getMessage(), e);
+        }
+    }
+
+    @When("I take a Percy screenshot named {string} with regions")
+    public void iTakeScreenshotWithRegions(String name) {
+        Map<String, Object> options = new HashMap<>();
+        if (!regions.isEmpty()) {
+            options.put("regions", new ArrayList<>(regions));
+            regions.clear();
+        }
+        try {
+            percy.screenshot(name, options);
+        } catch (Exception e) {
+            throw new RuntimeException("Percy screenshot failed: " + e.getMessage(), e);
+        }
+    }
+
+    @When("I take a Percy screenshot named {string} with options:")
+    public void iTakeScreenshotWithOptions(String name, Map<String, String> optionsTable) {
+        Map<String, Object> options = buildOptions(optionsTable);
+        if (!regions.isEmpty()) {
+            options.put("regions", new ArrayList<>(regions));
+            regions.clear();
+        }
+        try {
+            percy.screenshot(name, options);
+        } catch (Exception e) {
+            throw new RuntimeException("Percy screenshot failed: " + e.getMessage(), e);
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Then steps
     // ------------------------------------------------------------------
 
