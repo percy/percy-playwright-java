@@ -299,6 +299,19 @@ public class Percy {
         if ("automate".equals(sessionType)) { throw new RuntimeException("Invalid function call - snapshot(). Please use screenshot() function while using Percy with Automate. For more information on usage of PercyScreenshot, refer https://www.browserstack.com/docs/percy/integrate/functional-and-visual"); }
 
         Object domSnapshot = null;
+
+        // Merge .percy.yml config options with snapshot options (snapshot options take priority)
+        Map<String, Object> mergedOptions = new HashMap<>();
+        if (cliConfig != null && cliConfig.has("snapshot") && !cliConfig.isNull("snapshot")) {
+            JSONObject snapshotConfig = cliConfig.getJSONObject("snapshot");
+            for (String key : snapshotConfig.keySet()) {
+                mergedOptions.put(key, snapshotConfig.get(key));
+            }
+        }
+        if (options != null) {
+            mergedOptions.putAll(options);
+        }
+
         try {
             String percyDomScript = fetchPercyDOM();
             page.evaluate(percyDomScript);
@@ -310,10 +323,10 @@ public class Percy {
                 log("Cookie collection failed: " + e.getMessage(), "debug");
             }
 
-            if (isCaptureResponsiveDOM(options)) {
-                domSnapshot = captureResponsiveDom(cookies, percyDomScript, options);
+            if (isCaptureResponsiveDOM(mergedOptions)) {
+                domSnapshot = captureResponsiveDom(cookies, percyDomScript, mergedOptions);
             } else {
-                domSnapshot = getSerializedDOM(cookies, percyDomScript, options);
+                domSnapshot = getSerializedDOM(cookies, percyDomScript, mergedOptions);
             }
         } catch (Exception e) {
             log("Snapshot capture failed: " + e.getMessage());
