@@ -74,6 +74,22 @@ public class Percy {
     }
 
     /**
+     * Override the client info reported to Percy.
+     * Used by framework wrappers (e.g., Cucumber) to identify themselves.
+     */
+    public void setClientInfo(String clientInfo, String environmentInfo) {
+        this.env.setClientInfo(clientInfo);
+        this.env.setEnvironmentInfo(environmentInfo);
+    }
+
+    /**
+     * Get the SDK version string.
+     */
+    public static String getSdkVersion() {
+        return Environment.getSdkVersion();
+    }
+
+    /**
      * Creates a region configuration based on the provided parameters.
      *
      * @param params A map containing the region configuration options. Expected keys:
