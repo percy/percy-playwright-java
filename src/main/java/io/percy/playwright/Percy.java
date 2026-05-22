@@ -856,15 +856,17 @@ public class Percy {
             URI pageUri = new URI(page.url());
             String pageHost = pageUri.getHost();
 
-            List<Frame> crossOriginFrames = page.frames().stream()
+            // Only walk DIRECT children of the main frame. page.frames() returns the
+            // entire tree (including same-origin grandchildren of cross-origin
+            // frames); we want top-level CORS iframes only, since nested capture
+            // is handled inside processFrame via recursion when supported.
+            List<Frame> crossOriginFrames = page.mainFrame().childFrames().stream()
                     .filter(f -> {
                         String fUrl = f.url();
                         if ("about:blank".equals(fUrl) || fUrl.isEmpty()) { return false; }
-                        // If the page has no host (e.g., file:, data:), skip CORS detection
                         if (pageHost == null) { return false; }
                         try {
                             String frameHost = new URI(fUrl).getHost();
-                            // Treat frames with no host as non-cross-origin
                             return frameHost != null && !Objects.equals(frameHost, pageHost);
                         } catch (Exception e) {
                             return false;
@@ -927,8 +929,10 @@ public class Percy {
             return;
         }
 
+        boolean domEnabled = false;
         try {
             cdpSession.send("DOM.enable");
+            domEnabled = true;
 
             JsonObject docParams = new JsonObject();
             docParams.addProperty("depth", -1);
@@ -973,6 +977,9 @@ public class Percy {
             log("Could not expose closed shadow roots via CDP: " + err.getMessage(), "debug");
         } finally {
             if (cdpSession != null) {
+                if (domEnabled) {
+                    try { cdpSession.send("DOM.disable"); } catch (Exception ignored) { /* defensive */ }
+                }
                 try { cdpSession.detach(); } catch (Exception ignored) { }
             }
         }
