@@ -376,6 +376,10 @@ public class Percy {
 
         // Build a JSON object to POST back to the agent node process
         JSONObject json = new JSONObject(options);
+        // `readiness` is SDK-local — the CLI already has it via healthcheck.
+        // Strip before posting to avoid round-trip and stay forward-compatible
+        // with future CLI-side validators.
+        json.remove("readiness");
         json.put("url", url);
         json.put("name", name);
         json.put("domSnapshot", domSnapshot);
@@ -423,6 +427,8 @@ public class Percy {
     private String buildSnapshotJS(Map<String, Object> options) {
         StringBuilder jsBuilder = new StringBuilder();
         JSONObject json = new JSONObject(options);
+        // `readiness` is consumed by waitForReady upstream — not a serialize arg.
+        json.remove("readiness");
         jsBuilder.append(String.format("PercyDOM.serialize(%s)\n", json.toString()));
 
         return jsBuilder.toString();
@@ -431,30 +437,15 @@ public class Percy {
     /**
      * Readiness gate: runs PercyDOM.waitForReady BEFORE serialize (PER-7348).
      *
-     * Uses page.evaluate — Playwright auto-awaits Promises. The embedded JS
-     * checks typeof PercyDOM.waitForReady === 'function' so older CLI versions
-     * that lack the method are a graceful no-op.
-     *
-     * Readiness config precedence: options["readiness"] > cliConfig.snapshot.readiness
-     * > empty (CLI applies balanced default). If preset is "disabled", skip the
-     * evaluate call entirely. Any exception is swallowed at debug level — the
-     * serialize call still runs.
+     * Config precedence: per-snapshot options["readiness"] is shallow-merged
+     * over cliConfig.snapshot.readiness so a partial per-snapshot override
+     * inherits global keys (notably preset: disabled) instead of dropping
+     * them. If the merged preset is "disabled", skip the evaluate call.
      *
      * @return Readiness diagnostics to attach to the domSnapshot, or null.
      */
     protected Object waitForReady(Map<String, Object> options) {
-        Object perSnapshot = options != null ? options.get("readiness") : null;
-        JSONObject readinessConfig;
-        if (perSnapshot instanceof Map) {
-            readinessConfig = new JSONObject((Map<?, ?>) perSnapshot);
-        } else if (perSnapshot instanceof JSONObject) {
-            readinessConfig = (JSONObject) perSnapshot;
-        } else {
-            JSONObject snapshotConfig = cliConfig.optJSONObject("snapshot");
-            readinessConfig = snapshotConfig == null ? new JSONObject()
-                    : snapshotConfig.optJSONObject("readiness");
-            if (readinessConfig == null) { readinessConfig = new JSONObject(); }
-        }
+        JSONObject readinessConfig = resolveReadinessConfig(options);
         if ("disabled".equals(readinessConfig.optString("preset", null))) {
             return null;
         }
@@ -470,6 +461,30 @@ public class Percy {
             log("waitForReady failed, proceeding to serialize: " + e.getMessage(), "debug");
             return null;
         }
+    }
+
+    /**
+     * Shallow-merge of global (cliConfig.snapshot.readiness) and per-snapshot
+     * (options["readiness"]) readiness config. Per-snapshot keys win; global
+     * keys (notably preset: disabled) inherited.
+     */
+    @SuppressWarnings("unchecked")
+    private JSONObject resolveReadinessConfig(Map<String, Object> options) {
+        JSONObject merged = new JSONObject();
+        JSONObject snapshotConfig = cliConfig == null ? null : cliConfig.optJSONObject("snapshot");
+        JSONObject global = snapshotConfig == null ? null : snapshotConfig.optJSONObject("readiness");
+        if (global != null) {
+            for (String key : global.keySet()) merged.put(key, global.get(key));
+        }
+        Object perSnapshot = options != null ? options.get("readiness") : null;
+        if (perSnapshot instanceof Map) {
+            JSONObject perJson = new JSONObject((Map<String, Object>) perSnapshot);
+            for (String key : perJson.keySet()) merged.put(key, perJson.get(key));
+        } else if (perSnapshot instanceof JSONObject) {
+            JSONObject perJson = (JSONObject) perSnapshot;
+            for (String key : perJson.keySet()) merged.put(key, perJson.get(key));
+        }
+        return merged;
     }
 
     /**
