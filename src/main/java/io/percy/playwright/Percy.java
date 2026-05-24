@@ -764,6 +764,21 @@ public class Percy {
     // -------------------------------------------------------------------------
 
     /**
+     * Returns {@code true} if any ancestor of {@code frame} is itself in the
+     * provided set of known cross-origin frames. Used to dedupe descendants of
+     * a CORS frame whose serialization is handled inside its top-level CORS
+     * ancestor via PercyDOM.serialize().
+     */
+    private boolean hasCrossOriginAncestor(Frame frame, Set<Frame> crossOriginFrames) {
+        Frame parent = frame.parentFrame();
+        while (parent != null) {
+            if (crossOriginFrames.contains(parent)) { return true; }
+            parent = parent.parentFrame();
+        }
+        return false;
+    }
+
+    /**
      * Processes a single cross-origin {@link Frame}: injects the Percy DOM script,
      * serializes the frame, and retrieves the matching {@code data-percy-element-id}
      * from the main page so the CLI can stitch the iframe content into the snapshot.
@@ -784,6 +799,15 @@ public class Percy {
         try {
             // Inject Percy DOM into the cross-origin frame
             frame.evaluate(percyDomScript);
+
+            // TODO(PER-7292 follow-up): expose closed shadow roots inside this
+            // cross-origin frame. The top-page exposure uses page-level
+            // CDPSession + DOM.getDocument(pierce:true). Doing the same here
+            // requires attaching a CDP session to the OOPIF target
+            // (Target.attachToTarget on the frame's target id) and re-running
+            // DOM.enable/DOM.getDocument/resolveNode against that session.
+            // That is materially more than ~30 LOC and warrants its own ticket;
+            // tracked separately. Top-page closed-shadow capture still works.
 
             // enableJavaScript=true prevents standard iframe serialization so we can
             // handle cross-origin frames manually
@@ -856,11 +880,21 @@ public class Percy {
             URI pageUri = new URI(page.url());
             String pageHost = pageUri.getHost();
 
-            // Only walk DIRECT children of the main frame. page.frames() returns the
-            // entire tree (including same-origin grandchildren of cross-origin
-            // frames); we want top-level CORS iframes only, since nested capture
-            // is handled inside processFrame via recursion when supported.
-            List<Frame> crossOriginFrames = page.mainFrame().childFrames().stream()
+            // Option A (chosen): walk the full page.frames() tree but skip any
+            // frame whose nearest cross-origin ancestor frame is *already* in
+            // our result set. This guarantees:
+            //   - topologies like main(A) -> same-origin(A) -> cross-origin(B)
+            //     still capture B (which the prior mainFrame().childFrames()
+            //     short-walk lost, since processFrame does NOT recurse into
+            //     child frames — it only serializes the given frame).
+            //   - each top-level CORS frame is processed exactly once; nested
+            //     descendants of that CORS frame are handled by the in-frame
+            //     PercyDOM.serialize() call (same-document tree), so we must
+            //     not re-emit them here.
+            // Picked over Option B (recursive processFrame) because it is the
+            // minimal diff and preserves the existing test suite's frame
+            // mocking (mockPage.frames()).
+            List<Frame> allCrossOrigin = page.frames().stream()
                     .filter(f -> {
                         String fUrl = f.url();
                         if ("about:blank".equals(fUrl) || fUrl.isEmpty()) { return false; }
@@ -873,6 +907,14 @@ public class Percy {
                         }
                     })
                     .collect(Collectors.toList());
+
+            Set<Frame> crossOriginSet = new HashSet<>(allCrossOrigin);
+            List<Frame> crossOriginFrames = new ArrayList<>();
+            for (Frame f : allCrossOrigin) {
+                if (!hasCrossOriginAncestor(f, crossOriginSet)) {
+                    crossOriginFrames.add(f);
+                }
+            }
 
             if (!crossOriginFrames.isEmpty()) {
                 List<Map<String, Object>> processedFrames = new ArrayList<>();
