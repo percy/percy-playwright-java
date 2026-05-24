@@ -994,26 +994,33 @@ public class Percy {
             page.evaluate("() => { window.__percyClosedShadowRoots = window.__percyClosedShadowRoots || new WeakMap(); }");
 
             for (JsonObject pair : closedPairs) {
-                JsonObject resolveHost = new JsonObject();
-                resolveHost.addProperty("backendNodeId", pair.get("hostBackendNodeId").getAsInt());
-                JsonElement hostResult = cdpSession.send("DOM.resolveNode", resolveHost);
-                String hostObjectId = hostResult.getAsJsonObject().getAsJsonObject("object").get("objectId").getAsString();
+                // Wrap each per-host body so one bad backendNodeId (e.g. a node
+                // that was detached after DOM.getDocument but before
+                // DOM.resolveNode) doesn't abort exposure of the rest.
+                try {
+                    JsonObject resolveHost = new JsonObject();
+                    resolveHost.addProperty("backendNodeId", pair.get("hostBackendNodeId").getAsInt());
+                    JsonElement hostResult = cdpSession.send("DOM.resolveNode", resolveHost);
+                    String hostObjectId = hostResult.getAsJsonObject().getAsJsonObject("object").get("objectId").getAsString();
 
-                JsonObject resolveShadow = new JsonObject();
-                resolveShadow.addProperty("backendNodeId", pair.get("shadowBackendNodeId").getAsInt());
-                JsonElement shadowResult = cdpSession.send("DOM.resolveNode", resolveShadow);
-                String shadowObjectId = shadowResult.getAsJsonObject().getAsJsonObject("object").get("objectId").getAsString();
+                    JsonObject resolveShadow = new JsonObject();
+                    resolveShadow.addProperty("backendNodeId", pair.get("shadowBackendNodeId").getAsInt());
+                    JsonElement shadowResult = cdpSession.send("DOM.resolveNode", resolveShadow);
+                    String shadowObjectId = shadowResult.getAsJsonObject().getAsJsonObject("object").get("objectId").getAsString();
 
-                JsonObject callParams = new JsonObject();
-                callParams.addProperty("functionDeclaration",
-                    "function(shadowRoot) { window.__percyClosedShadowRoots.set(this, shadowRoot); }");
-                callParams.addProperty("objectId", hostObjectId);
-                JsonArray args = new JsonArray();
-                JsonObject arg = new JsonObject();
-                arg.addProperty("objectId", shadowObjectId);
-                args.add(arg);
-                callParams.add("arguments", args);
-                cdpSession.send("Runtime.callFunctionOn", callParams);
+                    JsonObject callParams = new JsonObject();
+                    callParams.addProperty("functionDeclaration",
+                        "function(shadowRoot) { window.__percyClosedShadowRoots.set(this, shadowRoot); }");
+                    callParams.addProperty("objectId", hostObjectId);
+                    JsonArray args = new JsonArray();
+                    JsonObject arg = new JsonObject();
+                    arg.addProperty("objectId", shadowObjectId);
+                    args.add(arg);
+                    callParams.add("arguments", args);
+                    cdpSession.send("Runtime.callFunctionOn", callParams);
+                } catch (Exception perPairErr) {
+                    log("Skipping one closed shadow host: " + perPairErr.getMessage(), "debug");
+                }
             }
         } catch (Exception err) {
             log("Could not expose closed shadow roots via CDP: " + err.getMessage(), "debug");
