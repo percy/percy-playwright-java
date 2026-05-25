@@ -435,7 +435,7 @@ public class Percy {
     }
 
     /**
-     * Readiness gate: runs PercyDOM.waitForReady BEFORE serialize (PER-7348).
+     * Readiness gate: runs PercyDOM.waitForReady BEFORE serialize.
      *
      * Config precedence: per-snapshot options["readiness"] is shallow-merged
      * over cliConfig.snapshot.readiness so a partial per-snapshot override
@@ -896,7 +896,7 @@ public class Percy {
             String percyDomScript,
             Map<String, Object> options) {
 
-        // Readiness gate before serialize (PER-7348). Graceful on old CLI.
+        // Readiness gate before serialize. Graceful on old CLI.
         Object readinessDiagnostics = waitForReady(options);
 
         Map<String, Object> domSnapshot =
