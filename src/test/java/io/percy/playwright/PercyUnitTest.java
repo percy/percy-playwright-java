@@ -41,6 +41,9 @@ import static org.mockito.Mockito.*;
 public class PercyUnitTest {
 
     private static HttpServer server;
+    // Saved PERCY_SERVER_ADDRESS so we can restore it after redirecting the SDK
+    // to our ephemeral stub port.
+    private static String originalServerAddress;
 
     // Routed responses keyed by request path.
     private static final Map<String, StubResponse> ROUTES = new HashMap<>();
@@ -59,8 +62,10 @@ public class PercyUnitTest {
     }
 
     @BeforeAll
-    public static void startStub() throws IOException {
-        server = HttpServer.create(new InetSocketAddress(5338), 0);
+    public static void startStub() throws Exception {
+        // Bind to an ephemeral port (0 -> OS-assigned) so we never collide with a
+        // real Percy CLI, which owns localhost:5338 under `percy exec` on CI.
+        server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         server.createContext("/", new HttpHandler() {
             @Override
             public void handle(HttpExchange exchange) throws IOException {
@@ -90,13 +95,33 @@ public class PercyUnitTest {
         });
         server.setExecutor(null);
         server.start();
+
+        // Redirect the SDK's HTTP calls to our stub for the duration of these tests.
+        originalServerAddress = getStaticStringField("PERCY_SERVER_ADDRESS");
+        setStaticStringField("PERCY_SERVER_ADDRESS",
+                "http://localhost:" + server.getAddress().getPort());
     }
 
     @AfterAll
-    public static void stopStub() {
+    public static void stopStub() throws Exception {
         if (server != null) {
             server.stop(0);
         }
+        if (originalServerAddress != null) {
+            setStaticStringField("PERCY_SERVER_ADDRESS", originalServerAddress);
+        }
+    }
+
+    private static String getStaticStringField(String name) throws Exception {
+        java.lang.reflect.Field f = Percy.class.getDeclaredField(name);
+        f.setAccessible(true);
+        return (String) f.get(null);
+    }
+
+    private static void setStaticStringField(String name, String value) throws Exception {
+        java.lang.reflect.Field f = Percy.class.getDeclaredField(name);
+        f.setAccessible(true);
+        f.set(null, value);
     }
 
     private void route(String path, int status, String body) {
