@@ -13,7 +13,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -63,9 +65,17 @@ public class PercyUnitTest {
             @Override
             public void handle(HttpExchange exchange) throws IOException {
                 String path = exchange.getRequestURI().getPath();
-                // Record the request body for assertion.
-                byte[] reqBytes = exchange.getRequestBody().readAllBytes();
-                LAST_BODY.put(path, new String(reqBytes, StandardCharsets.UTF_8));
+                // Record the request body for assertion. Read the stream manually
+                // for Java 8 compatibility (InputStream#readAllBytes is Java 9+).
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                byte[] chunk = new byte[4096];
+                int read;
+                try (InputStream reqStream = exchange.getRequestBody()) {
+                    while ((read = reqStream.read(chunk)) != -1) {
+                        buffer.write(chunk, 0, read);
+                    }
+                }
+                LAST_BODY.put(path, new String(buffer.toByteArray(), StandardCharsets.UTF_8));
 
                 StubResponse stub = ROUTES.getOrDefault(path, new StubResponse(200, "{}"));
                 for (Map.Entry<String, String> h : stub.headers.entrySet()) {
