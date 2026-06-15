@@ -124,6 +124,18 @@ public class PercyUnitTest {
         f.set(null, value);
     }
 
+    private static boolean getStaticBooleanField(String name) throws Exception {
+        java.lang.reflect.Field f = Percy.class.getDeclaredField(name);
+        f.setAccessible(true);
+        return (Boolean) f.get(null);
+    }
+
+    private static void setStaticBooleanField(String name, boolean value) throws Exception {
+        java.lang.reflect.Field f = Percy.class.getDeclaredField(name);
+        f.setAccessible(true);
+        f.set(null, value);
+    }
+
     private void route(String path, int status, String body) {
         ROUTES.put(path, new StubResponse(status, body));
     }
@@ -984,5 +996,457 @@ public class PercyUnitTest {
         Percy percy = newPercy(mockPage);
         Map<String, Object> result = percy.getSerializedDOM(new ArrayList<>(), "// dom", new HashMap<>());
         assertNull(result.get("corsIframes"));
+    }
+
+    // -------------------------------------------------------------------------
+    // healthcheck(): legacy @percy/agent branch (null core version) via seam.
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void healthcheckDisablesWhenCoreVersionHeaderMissing() throws Exception {
+        // Healthy 200 + version header present, but the getCoreVersion seam reports
+        // null (mirrors an @percy/agent response with no x-percy-core-version value).
+        StubResponse stub = new StubResponse(200, "{}");
+        stub.headers.put("x-percy-core-version", "1.27.0");
+        ROUTES.put("/percy/healthcheck", stub);
+        try {
+            Percy percy = new Percy(Mockito.mock(Page.class)) {
+                @Override
+                protected String getCoreVersion(org.apache.http.HttpResponse response) {
+                    return null;
+                }
+            };
+            // version == null -> healthcheck returns false -> Percy disabled.
+            assertNull(percy.snapshot("agent"));
+        } finally {
+            ROUTES.remove("/percy/healthcheck");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // setPageMetadata(): constructs a PageMetadata for the current page.
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void setPageMetadataCreatesMetadataForPage() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+        Percy percy = newPercy(mockPage);
+        percy.setPageMetadata();
+
+        java.lang.reflect.Field f = Percy.class.getDeclaredField("pageMetadata");
+        f.setAccessible(true);
+        Object meta = f.get(percy);
+        assertNotNull(meta);
+        assertTrue(meta instanceof PageMetadata);
+    }
+
+    // -------------------------------------------------------------------------
+    // log(): catch branch when the CLI is unreachable AND debug logging is on.
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void logCatchBranchRunsWhenCliUnreachableAndDebugEnabled() throws Exception {
+        boolean originalDebug = getStaticBooleanField("PERCY_DEBUG");
+        String currentAddr = getStaticStringField("PERCY_SERVER_ADDRESS");
+        try {
+            // Point at a closed port so httpClient.execute throws, and enable debug
+            // so the catch body (System.out print) executes.
+            setStaticStringField("PERCY_SERVER_ADDRESS", "http://localhost:1");
+            setStaticBooleanField("PERCY_DEBUG", true);
+            assertDoesNotThrow(() -> Percy.log("unreachable log", "info"));
+        } finally {
+            setStaticBooleanField("PERCY_DEBUG", originalDebug);
+            setStaticStringField("PERCY_SERVER_ADDRESS", currentAddr);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // getResponsiveWidths(): checked-Exception catch when CLI unreachable.
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void getResponsiveWidthsThrowsRuntimeWhenWidthsConfigUnreachable() throws Exception {
+        Page mockPage = mockSerializablePage();
+        when(mockPage.viewportSize())
+                .thenReturn(new com.microsoft.playwright.options.ViewportSize(1280, 720));
+        route("/percy/snapshot", 200, "{\"data\":{\"snapshot-name\":\"x\"}}");
+        String currentAddr = getStaticStringField("PERCY_SERVER_ADDRESS");
+        try {
+            Percy percy = newEnabledPercy(mockPage,
+                    "{\"type\":\"web\",\"config\":{\"snapshot\":{\"responsiveSnapshotCapture\":true}}}");
+            // Now point the SDK at a closed port; the widths-config GET will throw an
+            // IOException (a checked Exception), exercising the catch(Exception) branch.
+            setStaticStringField("PERCY_SERVER_ADDRESS", "http://localhost:1");
+            Map<String, Object> options = new HashMap<>();
+            options.put("responsiveSnapshotCapture", true);
+            // snapshot() swallows the RuntimeException from getResponsiveWidths and returns null.
+            assertNull(percy.snapshot("RespUnreachable", options));
+        } finally {
+            setStaticStringField("PERCY_SERVER_ADDRESS", currentAddr);
+            ROUTES.remove("/percy/healthcheck");
+            ROUTES.remove("/percy/dom.js");
+            ROUTES.remove("/percy/snapshot");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // captureResponsiveDom(): reload-page branch + sleep-time branches.
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void responsiveCaptureReloadsPageWhenReloadFlagEnabled() throws Exception {
+        Page mockPage = mockSerializablePage();
+        when(mockPage.viewportSize())
+                .thenReturn(new com.microsoft.playwright.options.ViewportSize(1280, 720));
+        route("/percy/widths-config", 200, "{\"widths\":[{\"width\":480},{\"width\":1200}]}");
+        route("/percy/snapshot", 200, "{\"data\":{\"snapshot-name\":\"Reload\"}}");
+
+        boolean originalReload = getStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE");
+        try {
+            setStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE", true);
+            Percy percy = newEnabledPercy(mockPage,
+                    "{\"type\":\"web\",\"config\":{\"snapshot\":{\"responsiveSnapshotCapture\":true}}}");
+            Map<String, Object> options = new HashMap<>();
+            options.put("responsiveSnapshotCapture", true);
+            JSONObject result = percy.snapshot("Reload", options);
+            assertNotNull(result);
+            // page.reload() must have been triggered per width because reload flag is on.
+            verify(mockPage, atLeastOnce()).reload();
+        } finally {
+            setStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE", originalReload);
+            ROUTES.remove("/percy/healthcheck");
+            ROUTES.remove("/percy/dom.js");
+            ROUTES.remove("/percy/widths-config");
+            ROUTES.remove("/percy/snapshot");
+        }
+    }
+
+    @Test
+    public void responsiveCaptureParsesNonNumericSleepTimeWithoutSleeping() throws Exception {
+        Page mockPage = mockSerializablePage();
+        when(mockPage.viewportSize())
+                .thenReturn(new com.microsoft.playwright.options.ViewportSize(1280, 720));
+        route("/percy/widths-config", 200, "{\"widths\":[{\"width\":480}]}");
+        route("/percy/snapshot", 200, "{\"data\":{\"snapshot-name\":\"BadSleep\"}}");
+
+        String originalSleep = getStaticStringField("RESPONSIVE_CAPTURE_SLEEP_TIME");
+        try {
+            // Non-numeric sleep time -> Integer.parseInt throws NumberFormatException
+            // which is caught and ignored (no actual sleep).
+            setStaticStringField("RESPONSIVE_CAPTURE_SLEEP_TIME", "abc");
+            Percy percy = newEnabledPercy(mockPage,
+                    "{\"type\":\"web\",\"config\":{\"snapshot\":{\"responsiveSnapshotCapture\":true}}}");
+            Map<String, Object> options = new HashMap<>();
+            options.put("responsiveSnapshotCapture", true);
+            assertNotNull(percy.snapshot("BadSleep", options));
+        } finally {
+            setStaticStringField("RESPONSIVE_CAPTURE_SLEEP_TIME", originalSleep);
+            ROUTES.remove("/percy/healthcheck");
+            ROUTES.remove("/percy/dom.js");
+            ROUTES.remove("/percy/widths-config");
+            ROUTES.remove("/percy/snapshot");
+        }
+    }
+
+    @Test
+    public void responsiveCaptureBreaksWhenSleepInterrupted() throws Exception {
+        Page mockPage = mockSerializablePage();
+        when(mockPage.viewportSize())
+                .thenReturn(new com.microsoft.playwright.options.ViewportSize(1280, 720));
+        route("/percy/widths-config", 200, "{\"widths\":[{\"width\":480},{\"width\":1200}]}");
+        route("/percy/snapshot", 200, "{\"data\":{\"snapshot-name\":\"Interrupt\"}}");
+
+        String originalSleep = getStaticStringField("RESPONSIVE_CAPTURE_SLEEP_TIME");
+        try {
+            // Positive sleep time; pre-set the interrupt flag so Thread.sleep throws
+            // InterruptedException immediately, exercising the interrupt/break branch.
+            setStaticStringField("RESPONSIVE_CAPTURE_SLEEP_TIME", "1");
+            Percy percy = newEnabledPercy(mockPage,
+                    "{\"type\":\"web\",\"config\":{\"snapshot\":{\"responsiveSnapshotCapture\":true}}}");
+            Map<String, Object> options = new HashMap<>();
+            options.put("responsiveSnapshotCapture", true);
+
+            Thread.currentThread().interrupt();
+            JSONObject result = percy.snapshot("Interrupt", options);
+            // The capture loop breaks early on interrupt; snapshot still posts the
+            // DOMs gathered so far (one width).
+            assertNotNull(result);
+        } finally {
+            // Clear the interrupt flag we set so it doesn't leak into other tests.
+            Thread.interrupted();
+            setStaticStringField("RESPONSIVE_CAPTURE_SLEEP_TIME", originalSleep);
+            ROUTES.remove("/percy/healthcheck");
+            ROUTES.remove("/percy/dom.js");
+            ROUTES.remove("/percy/widths-config");
+            ROUTES.remove("/percy/snapshot");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // calculateDefaultHeight(): PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT enabled.
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void responsiveCaptureUsesMinHeightFromOptionsWhenMinHeightFlagEnabled() throws Exception {
+        Page mockPage = mockSerializablePage();
+        when(mockPage.viewportSize())
+                .thenReturn(new com.microsoft.playwright.options.ViewportSize(1280, 720));
+        // Width entries without height force the default-height calculation path.
+        route("/percy/widths-config", 200, "{\"widths\":[{\"width\":480}]}");
+        route("/percy/snapshot", 200, "{\"data\":{\"snapshot-name\":\"MinH\"}}");
+
+        boolean originalMinHeight = getStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT");
+        try {
+            setStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT", true);
+            Percy percy = newEnabledPercy(mockPage,
+                    "{\"type\":\"web\",\"config\":{\"snapshot\":{\"responsiveSnapshotCapture\":true}}}");
+            Map<String, Object> options = new HashMap<>();
+            options.put("responsiveSnapshotCapture", true);
+            options.put("minHeight", 1500); // exercises the Number branch.
+            assertNotNull(percy.snapshot("MinH", options));
+        } finally {
+            setStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT", originalMinHeight);
+            ROUTES.remove("/percy/healthcheck");
+            ROUTES.remove("/percy/dom.js");
+            ROUTES.remove("/percy/widths-config");
+            ROUTES.remove("/percy/snapshot");
+        }
+    }
+
+    @Test
+    public void responsiveCaptureUsesMinHeightFromCliConfigWhenMinHeightFlagEnabled() throws Exception {
+        Page mockPage = mockSerializablePage();
+        when(mockPage.viewportSize())
+                .thenReturn(new com.microsoft.playwright.options.ViewportSize(1280, 720));
+        route("/percy/widths-config", 200, "{\"widths\":[{\"width\":480}]}");
+        route("/percy/snapshot", 200, "{\"data\":{\"snapshot-name\":\"MinHCli\"}}");
+
+        boolean originalMinHeight = getStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT");
+        try {
+            setStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT", true);
+            // No minHeight option -> falls through to cliConfig.snapshot.minHeight (an int).
+            Percy percy = newEnabledPercy(mockPage,
+                    "{\"type\":\"web\",\"config\":{\"snapshot\":{\"responsiveSnapshotCapture\":true,\"minHeight\":1300}}}");
+            Map<String, Object> options = new HashMap<>();
+            options.put("responsiveSnapshotCapture", true);
+            assertNotNull(percy.snapshot("MinHCli", options));
+        } finally {
+            setStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT", originalMinHeight);
+            ROUTES.remove("/percy/healthcheck");
+            ROUTES.remove("/percy/dom.js");
+            ROUTES.remove("/percy/widths-config");
+            ROUTES.remove("/percy/snapshot");
+        }
+    }
+
+    @Test
+    public void responsiveCaptureDefaultHeightSwallowsExceptionWhenMinHeightConfigInvalid() throws Exception {
+        Page mockPage = mockSerializablePage();
+        when(mockPage.viewportSize())
+                .thenReturn(new com.microsoft.playwright.options.ViewportSize(1280, 720));
+        route("/percy/widths-config", 200, "{\"widths\":[{\"width\":480}]}");
+        route("/percy/snapshot", 200, "{\"data\":{\"snapshot-name\":\"MinHErr\"}}");
+
+        boolean originalMinHeight = getStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT");
+        try {
+            setStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT", true);
+            // snapshot.minHeight is a non-numeric string -> getInt() throws inside the
+            // try, exercising calculateDefaultHeight's catch branch.
+            Percy percy = newEnabledPercy(mockPage,
+                    "{\"type\":\"web\",\"config\":{\"snapshot\":{\"responsiveSnapshotCapture\":true,\"minHeight\":\"oops\"}}}");
+            Map<String, Object> options = new HashMap<>();
+            options.put("responsiveSnapshotCapture", true);
+            assertNotNull(percy.snapshot("MinHErr", options));
+        } finally {
+            setStaticBooleanField("PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT", originalMinHeight);
+            ROUTES.remove("/percy/healthcheck");
+            ROUTES.remove("/percy/dom.js");
+            ROUTES.remove("/percy/widths-config");
+            ROUTES.remove("/percy/snapshot");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // getSerializedDOM(): cross-origin processing block catch (bad page URL).
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void getSerializedDOMSwallowsCorsProcessingExceptionOnBadPageUrl() {
+        Page mockPage = Mockito.mock(Page.class);
+        Map<String, Object> domMap = new HashMap<>();
+        domMap.put("html", "<html></html>");
+        when(mockPage.evaluate(anyString())).thenReturn(domMap);
+        // A URL with an illegal space makes `new URI(page.url())` throw inside the
+        // cross-origin block; the catch logs and proceeds.
+        when(mockPage.url()).thenReturn("http://exa mple.com/page");
+        when(mockPage.frames()).thenReturn(new ArrayList<>());
+
+        Percy percy = newPercy(mockPage);
+        Map<String, Object> result = percy.getSerializedDOM(new ArrayList<>(), "// dom", new HashMap<>());
+        // Snapshot still produced; no corsIframes attached.
+        assertNotNull(result);
+        assertNull(result.get("corsIframes"));
+    }
+
+    // -------------------------------------------------------------------------
+    // createRegion(): standard algorithm attaches every configuration key.
+    // -------------------------------------------------------------------------
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void createRegionStandardAttachesAllConfigurationKeys() {
+        Percy percy = newPercy(Mockito.mock(Page.class));
+        Map<String, Object> params = new HashMap<>();
+        params.put("algorithm", "standard");
+        params.put("elementCSS", ".banner");
+        params.put("diffSensitivity", 3);
+        params.put("imageIgnoreThreshold", 0.1);
+        params.put("carouselsEnabled", true);
+        params.put("bannersEnabled", false);
+        params.put("adsEnabled", true);
+        params.put("diffIgnoreThreshold", 0.25);
+
+        Map<String, Object> region = percy.createRegion(params);
+
+        assertEquals("standard", region.get("algorithm"));
+        Map<String, Object> config = (Map<String, Object>) region.get("configuration");
+        assertNotNull(config);
+        assertEquals(3, config.get("diffSensitivity"));
+        assertEquals(0.1, config.get("imageIgnoreThreshold"));
+        assertEquals(true, config.get("carouselsEnabled"));
+        assertEquals(false, config.get("bannersEnabled"));
+        assertEquals(true, config.get("adsEnabled"));
+        Map<String, Object> assertion = (Map<String, Object>) region.get("assertion");
+        assertNotNull(assertion);
+        assertEquals(0.25, assertion.get("diffIgnoreThreshold"));
+    }
+
+    // -------------------------------------------------------------------------
+    // isCaptureResponsiveDOM(): percy.deferUploads=true forces the non-responsive
+    // path even when responsiveSnapshotCapture is requested.
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void deferUploadsDisablesResponsiveCaptureAndUsesPlainSnapshot() {
+        Page mockPage = mockSerializablePage();
+        route("/percy/snapshot", 200, "{\"data\":{\"snapshot-name\":\"Defer\"}}");
+        try {
+            // deferUploads=true short-circuits isCaptureResponsiveDOM -> plain serialize,
+            // so /percy/widths-config is never queried.
+            Percy percy = newEnabledPercy(mockPage,
+                    "{\"type\":\"web\",\"config\":{\"percy\":{\"deferUploads\":true},"
+                    + "\"snapshot\":{\"responsiveSnapshotCapture\":true}}}");
+            Map<String, Object> options = new HashMap<>();
+            options.put("responsiveSnapshotCapture", true);
+            JSONObject result = percy.snapshot("Defer", options);
+            assertNotNull(result);
+            // Responsive capture is the only path that resizes the viewport; deferUploads
+            // forces the plain serialize path, so the viewport is never resized.
+            verify(mockPage, never()).setViewportSize(anyInt(), anyInt());
+        } finally {
+            ROUTES.remove("/percy/healthcheck");
+            ROUTES.remove("/percy/dom.js");
+            ROUTES.remove("/percy/snapshot");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // captureResponsiveDom(): positive sleep time -> Thread.sleep completes.
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void responsiveCaptureSleepsBetweenWidthsWhenSleepTimePositive() throws Exception {
+        Page mockPage = mockSerializablePage();
+        when(mockPage.viewportSize())
+                .thenReturn(new com.microsoft.playwright.options.ViewportSize(1280, 720));
+        // Single width keeps the (1-second) sleep to a single iteration.
+        route("/percy/widths-config", 200, "{\"widths\":[{\"width\":480}]}");
+        route("/percy/snapshot", 200, "{\"data\":{\"snapshot-name\":\"Sleep\"}}");
+
+        String originalSleep = getStaticStringField("RESPONSIVE_CAPTURE_SLEEP_TIME");
+        try {
+            // "1" -> sleepMs = 1000 (> 0) -> Thread.sleep actually runs to completion.
+            setStaticStringField("RESPONSIVE_CAPTURE_SLEEP_TIME", "1");
+            Percy percy = newEnabledPercy(mockPage,
+                    "{\"type\":\"web\",\"config\":{\"snapshot\":{\"responsiveSnapshotCapture\":true}}}");
+            Map<String, Object> options = new HashMap<>();
+            options.put("responsiveSnapshotCapture", true);
+            assertNotNull(percy.snapshot("Sleep", options));
+        } finally {
+            setStaticStringField("RESPONSIVE_CAPTURE_SLEEP_TIME", originalSleep);
+            ROUTES.remove("/percy/healthcheck");
+            ROUTES.remove("/percy/dom.js");
+            ROUTES.remove("/percy/widths-config");
+            ROUTES.remove("/percy/snapshot");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // getSerializedDOM(): cross-origin frame processed successfully -> corsIframes.
+    // -------------------------------------------------------------------------
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void getSerializedDOMAttachesCorsIframeWhenFrameProcessedSuccessfully() {
+        Page mockPage = Mockito.mock(Page.class);
+        Frame crossFrame = Mockito.mock(Frame.class);
+
+        Map<String, Object> mainDom = new HashMap<>();
+        mainDom.put("html", "<html></html>");
+        // page.evaluate(serializeJs) -> main DOM.
+        when(mockPage.evaluate(anyString())).thenReturn(mainDom);
+        // page.evaluate(js, frameUrl) -> iframe element lookup returns a percyElementId.
+        Map<String, Object> iframeData = new HashMap<>();
+        iframeData.put("percyElementId", "el-123");
+        when(mockPage.evaluate(anyString(), any())).thenReturn(iframeData);
+        when(mockPage.url()).thenReturn("http://example.com/page");
+        when(crossFrame.url()).thenReturn("http://other.com/widget");
+
+        // frame.evaluate(domScript) (void) then frame.evaluate(serialize) -> iframe snapshot.
+        Map<String, Object> iframeSnapshot = new HashMap<>();
+        iframeSnapshot.put("html", "<iframe-content/>");
+        when(crossFrame.evaluate(anyString())).thenReturn(null).thenReturn(iframeSnapshot);
+        when(mockPage.frames()).thenReturn(Arrays.asList(crossFrame));
+
+        Percy percy = newPercy(mockPage);
+        Map<String, Object> result =
+                percy.getSerializedDOM(new ArrayList<>(), "// dom", new HashMap<>());
+
+        // The processed cross-origin frame must be attached under corsIframes.
+        List<Map<String, Object>> corsIframes =
+                (List<Map<String, Object>>) result.get("corsIframes");
+        assertNotNull(corsIframes);
+        assertEquals(1, corsIframes.size());
+        Map<String, Object> processed = corsIframes.get(0);
+        assertEquals("http://other.com/widget", processed.get("frameUrl"));
+        assertEquals(iframeSnapshot, processed.get("iframeSnapshot"));
+        Map<String, Object> data = (Map<String, Object>) processed.get("iframeData");
+        assertEquals("el-123", data.get("percyElementId"));
+    }
+
+    // -------------------------------------------------------------------------
+    // waitForReady(): page.evaluate throws -> catch logs and returns null.
+    // -------------------------------------------------------------------------
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void waitForReadySwallowsEvaluateExceptionAndProceeds() {
+        Page mockPage = Mockito.mock(Page.class);
+        Map<String, Object> mainDom = new HashMap<>();
+        mainDom.put("html", "<html></html>");
+        // Single-arg evaluate (the serialize call) succeeds.
+        when(mockPage.evaluate(anyString())).thenReturn(mainDom);
+        // Two-arg evaluate is the waitForReady call -> throw, exercising the catch branch.
+        when(mockPage.evaluate(anyString(), any())).thenThrow(new RuntimeException("ready boom"));
+        when(mockPage.url()).thenReturn("http://example.com/page");
+        when(mockPage.frames()).thenReturn(new ArrayList<>());
+
+        Percy percy = newPercy(mockPage);
+        // No readiness option -> merged config is empty -> preset != "disabled" -> enters
+        // the try, evaluate throws, catch returns null; serialize still produces a snapshot.
+        Map<String, Object> result =
+                percy.getSerializedDOM(new ArrayList<>(), "// dom", new HashMap<>());
+        assertNotNull(result);
+        assertNull(result.get("readiness_diagnostics"));
     }
 }

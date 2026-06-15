@@ -535,6 +535,17 @@ public class Percy {
     }
 
     /**
+     * Reads the Percy CLI core version reported by the healthcheck response header.
+     *
+     * <p>Isolated into a seam so the {@code version == null} legacy-agent branch in
+     * {@link #healthcheck()} can be exercised by a unit test (a live CLI always sends
+     * a non-null header value). Behavior is identical in production.</p>
+     */
+    protected String getCoreVersion(HttpResponse response) {
+        return response.getFirstHeader("x-percy-core-version").getValue();
+    }
+
+    /**
      * Checks to make sure the local Percy server is running. If not, disable Percy.
      */
     private boolean healthcheck() {
@@ -550,7 +561,7 @@ public class Percy {
                 throw new RuntimeException("Failed with HTTP error code : " + statusCode);
             }
 
-            String version = response.getFirstHeader("x-percy-core-version").getValue();
+            String version = getCoreVersion(response);
 
             if (version == null) {
                 log("You may be using @percy/agent" +

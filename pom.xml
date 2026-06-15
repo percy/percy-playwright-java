@@ -228,10 +228,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <!-- Honest floor; the suite covers ~0.88. The few
-                                                 uncovered lines need a live CLI/browser (SDKTest
-                                                 screenshot methods, PageMetadata guid paths). -->
-                                            <minimum>0.85</minimum>
+                                            <!-- Green floor. The mock/seam-based unit suite covers
+                                                 1.00 of src/main LINE locally (macOS, JaCoCo 0.8.12).
+                                                 Floor is held ~0.05 below the achieved ratio to
+                                                 absorb macOS<->Linux JaCoCo counting variance on CI
+                                                 while still failing on any real regression. -->
+                                            <minimum>0.95</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

@@ -461,4 +461,148 @@ class PercyStepsTest {
         PercySteps.setPage(mockPage);
         assertDoesNotThrow(steps::percyShouldBeEnabled);
     }
+
+    // ------------------------------------------------------------------
+    // iHaveAPercyInstance: percy == null but page set -> constructs Percy.
+    // ------------------------------------------------------------------
+
+    @Test
+    void testIHaveAPercyInstanceConstructsPercyWhenPageSetButPercyNull() throws Exception {
+        // Set the page field directly (without setPage, which would also set percy),
+        // then null the percy field so iHaveAPercyInstance hits the `new Percy(page)` branch.
+        setStaticField("page", mockPage);
+        setStaticField("percy", null);
+
+        steps.iHaveAPercyInstance();
+        assertNotNull(PercySteps.getPercy());
+    }
+
+    private void setStaticField(String name, Object value) {
+        try {
+            Field field = PercySteps.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(null, value);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // buildOptions: scopeOptions case parses JSON into a Map.
+    // ------------------------------------------------------------------
+
+    @Test
+    void testTakeSnapshotWithOptionsScopeOptionsParsed() {
+        initWithMockPercy();
+        Map<String, String> optionsTable = new LinkedHashMap<>();
+        optionsTable.put("scopeOptions", "{\"scroll\":true}");
+
+        steps.iTakeSnapshotWithOptions("Scope Opts", optionsTable);
+
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(mockPercy).snapshot(eq("Scope Opts"), captor.capture());
+        Map<String, Object> scopeOptions = (Map<String, Object>) captor.getValue().get("scopeOptions");
+        assertNotNull(scopeOptions);
+        assertEquals(true, scopeOptions.get("scroll"));
+    }
+
+    // ------------------------------------------------------------------
+    // Snapshot-with-options and screenshot-with-regions: non-empty regions branch.
+    // ------------------------------------------------------------------
+
+    @Test
+    void testTakeSnapshotWithOptionsAttachesRegions() {
+        initWithMockPercy();
+        Map<String, Object> fakeRegion = new HashMap<>();
+        fakeRegion.put("algorithm", "ignore");
+        when(mockPercy.createRegion(anyMap())).thenReturn(fakeRegion);
+
+        steps.iHaveAPercyInstance();
+        steps.iCreateIgnoreRegionCSS(".banner");
+
+        Map<String, String> optionsTable = new LinkedHashMap<>();
+        optionsTable.put("percyCSS", "body{}");
+        steps.iTakeSnapshotWithOptions("Opts+Regions", optionsTable);
+
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(mockPercy).snapshot(eq("Opts+Regions"), captor.capture());
+        List<Map<String, Object>> regions = (List<Map<String, Object>>) captor.getValue().get("regions");
+        assertNotNull(regions);
+        assertEquals(1, regions.size());
+    }
+
+    @Test
+    void testTakeScreenshotWithOptionsAttachesRegions() throws Exception {
+        initWithMockPercy();
+        Map<String, Object> fakeRegion = new HashMap<>();
+        fakeRegion.put("algorithm", "ignore");
+        when(mockPercy.createRegion(anyMap())).thenReturn(fakeRegion);
+
+        steps.iHaveAPercyInstance();
+        steps.iCreateIgnoreRegionCSS(".banner");
+
+        Map<String, String> optionsTable = new LinkedHashMap<>();
+        optionsTable.put("percyCSS", "body{}");
+        steps.iTakeScreenshotWithOptions("ShotOpts+Regions", optionsTable);
+
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(mockPercy).screenshot(eq("ShotOpts+Regions"), captor.capture());
+        List<Map<String, Object>> regions = (List<Map<String, Object>>) captor.getValue().get("regions");
+        assertNotNull(regions);
+        assertEquals(1, regions.size());
+    }
+
+    // ------------------------------------------------------------------
+    // Screenshot steps: percy.screenshot throwing -> wrapped RuntimeException.
+    // ------------------------------------------------------------------
+
+    @Test
+    void testTakeScreenshotWrapsException() throws Exception {
+        initWithMockPercy();
+        when(mockPercy.screenshot(anyString())).thenThrow(new RuntimeException("boom"));
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> steps.iTakeScreenshot("Crash"));
+        assertTrue(ex.getMessage().contains("Percy screenshot failed"));
+    }
+
+    @Test
+    void testTakeScreenshotWithRegionsWrapsException() throws Exception {
+        initWithMockPercy();
+        when(mockPercy.screenshot(anyString(), anyMap())).thenThrow(new RuntimeException("boom"));
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> steps.iTakeScreenshotWithRegions("Crash"));
+        assertTrue(ex.getMessage().contains("Percy screenshot failed"));
+    }
+
+    @Test
+    void testTakeScreenshotWithOptionsWrapsException() throws Exception {
+        initWithMockPercy();
+        when(mockPercy.screenshot(anyString(), anyMap())).thenThrow(new RuntimeException("boom"));
+        Map<String, String> optionsTable = new LinkedHashMap<>();
+        optionsTable.put("percyCSS", "body{}");
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> steps.iTakeScreenshotWithOptions("Crash", optionsTable));
+        assertTrue(ex.getMessage().contains("Percy screenshot failed"));
+    }
+
+    // ------------------------------------------------------------------
+    // resolveVersion seam: throwing supplier falls back to "unknown".
+    // ------------------------------------------------------------------
+
+    @Test
+    void testResolveVersionReturnsValueFromSupplier() throws Exception {
+        assertEquals("7.15.0", PercySteps.resolveVersion(() -> "7.15.0"));
+    }
+
+    @Test
+    void testResolveVersionReturnsUnknownWhenSupplierReturnsNull() throws Exception {
+        assertEquals("unknown", PercySteps.resolveVersion(() -> null));
+    }
+
+    @Test
+    void testResolveVersionReturnsUnknownWhenSupplierThrows() throws Exception {
+        assertEquals("unknown", PercySteps.resolveVersion(() -> {
+            throw new RuntimeException("no package");
+        }));
+    }
 }

@@ -37,12 +37,44 @@ public class PageMetadata extends Exception {
     }
 
     /**
+     * Returns the Playwright internal channel-owner object backing the page.
+     *
+     * <p>Isolated into a seam so the surrounding reflective guid-extraction logic
+     * can be exercised against a fake channel owner in unit tests. In production
+     * this is the live {@link PageImpl}.</p>
+     */
+    protected Object resolvePageChannelOwner() {
+        return (PageImpl) this.page;
+    }
+
+    /**
+     * Returns the Playwright internal channel-owner object backing the page's
+     * main frame.
+     *
+     * <p>Isolated into a seam (see {@link #resolvePageChannelOwner()}).</p>
+     */
+    protected Object resolveFrameChannelOwner() {
+        return ((PageImpl) this.page).mainFrame();
+    }
+
+    /**
+     * Returns the Playwright internal channel-owner object backing the browser.
+     *
+     * <p>Isolated into a seam (see {@link #resolvePageChannelOwner()}).</p>
+     */
+    protected Object resolveBrowserChannelOwner() {
+        BrowserContext context = this.page.context();
+        Browser browserFromContext = context.browser();
+        return browserFromContext;
+    }
+
+    /**
      * Get Playwright Page Guid
      */
     public String getPageGuid() throws Exception {
         try {
             if (this.pageGuid != null) return this.pageGuid;
-            PageImpl pageImpl = (PageImpl) this.page;
+            Object pageImpl = resolvePageChannelOwner();
             Field pageField = pageImpl.getClass().getSuperclass().getDeclaredField("guid");
             pageField.setAccessible(true);
             this.pageGuid = (String) pageField.get(pageImpl);
@@ -59,10 +91,10 @@ public class PageMetadata extends Exception {
     public String getFrameGuid() throws Exception {
         try {
             if (this.frameGuid != null) return this.frameGuid;
-            PageImpl pageImpl = (PageImpl) this.page;
-            Field frameField = pageImpl.mainFrame().getClass().getSuperclass().getDeclaredField("guid");
+            Object frameOwner = resolveFrameChannelOwner();
+            Field frameField = frameOwner.getClass().getSuperclass().getDeclaredField("guid");
             frameField.setAccessible(true);
-            this.frameGuid = (String) frameField.get(pageImpl.mainFrame());
+            this.frameGuid = (String) frameField.get(frameOwner);
         } catch (Exception err) {
             Percy.log("Failed to fetch FrameGuid, error: " + err.getMessage());
             throw new Exception("Failed to fetch FrameGuid");
@@ -76,12 +108,10 @@ public class PageMetadata extends Exception {
     public String getBrowserGuid() throws Exception {
         try {
             if (this.browserGuid != null) return this.browserGuid;
-            PageImpl pageImpl = (PageImpl) this.page;
-            BrowserContext context = this.page.context();
-            Browser browserFromContext = context.browser();
+            Object browserFromContext = resolveBrowserChannelOwner();
             Field browserField = browserFromContext.getClass().getSuperclass().getDeclaredField("guid");
             browserField.setAccessible(true);
-            this.browserGuid = (String) browserField.get(pageImpl.mainFrame());
+            this.browserGuid = (String) browserField.get(resolveFrameChannelOwner());
         } catch (Exception err) {
             Percy.log("Failed to fetch BrowserGuid, error: " + err.getMessage());
             throw new Exception("Failed to fetch BrowserGuid");

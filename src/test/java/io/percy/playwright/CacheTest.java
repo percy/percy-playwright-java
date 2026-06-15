@@ -40,4 +40,12 @@ public class CacheTest {
         Cache.CACHE_MAP.put("some-key-2", "value-1");
         assertEquals((String) Cache.CACHE_MAP.get("some-key-2"), "value-1");
     }
+
+    @Test
+    void cacheInstantiationTest() {
+        // Exercise the (implicit) default constructor and the shared static map.
+        Cache cache = new Cache();
+        assertNotNull(cache);
+        assertNotNull(Cache.CACHE_MAP);
+    }
 }
