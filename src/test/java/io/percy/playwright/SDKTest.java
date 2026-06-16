@@ -664,4 +664,40 @@ public class SDKTest {
         assertEquals("<html></html>", result.get("html"));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    public void deepMergesConfigWithPerCallOptions() {
+        // Simulate cliConfig.snapshot with a nested discovery block.
+        JSONObject snapshotConfig = new JSONObject();
+        JSONObject discovery = new JSONObject();
+        discovery.put("networkIdleTimeout", 50);
+        discovery.put("disableCache", false);
+        snapshotConfig.put("discovery", discovery);
+        snapshotConfig.put("widths", new org.json.JSONArray(Arrays.asList(375, 1280)));
+
+        Object base = Percy.jsonToJava(snapshotConfig);
+        assertTrue(base instanceof Map);
+
+        // Per-call options: override only one nested leaf + a null that must not clobber.
+        Map<String, Object> perCallDiscovery = new HashMap<>();
+        perCallDiscovery.put("disableCache", true);
+        Map<String, Object> options = new HashMap<>();
+        options.put("discovery", perCallDiscovery);
+        options.put("scope", null); // null per-call value must be skipped
+
+        Map<String, Object> merged = Percy.deepMerge((Map<String, Object>) base, options);
+
+        // Nested discovery is deep-merged: per-call wins at disableCache, config kept for networkIdleTimeout.
+        Map<String, Object> mergedDiscovery = (Map<String, Object>) merged.get("discovery");
+        assertEquals(50, mergedDiscovery.get("networkIdleTimeout"));
+        assertEquals(true, mergedDiscovery.get("disableCache"));
+
+        // Arrays/scalars from config survive when not overridden.
+        assertTrue(merged.get("widths") instanceof List);
+        assertEquals(Arrays.asList(375, 1280), merged.get("widths"));
+
+        // Null per-call value did not clobber and did not add the key.
+        assertFalse(merged.containsKey("scope"));
+    }
+
 }

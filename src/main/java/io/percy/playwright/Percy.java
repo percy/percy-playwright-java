@@ -316,17 +316,19 @@ public class Percy {
 
         Object domSnapshot = null;
 
-        // Merge .percy.yml config options with snapshot options (snapshot options take priority)
-        Map<String, Object> mergedOptions = new HashMap<>();
+        // Deep-merge .percy.yml config options with snapshot options. Nested
+        // objects merge recursively, per-call options win at the leaves,
+        // arrays/scalars replace wholesale, and per-call null values do not
+        // clobber a real value coming from .percy.yml config.
+        Map<String, Object> baseConfig = new HashMap<>();
         if (cliConfig != null && cliConfig.has("snapshot") && !cliConfig.isNull("snapshot")) {
             JSONObject snapshotConfig = cliConfig.getJSONObject("snapshot");
-            for (String key : snapshotConfig.keySet()) {
-                mergedOptions.put(key, snapshotConfig.get(key));
+            Object converted = jsonToJava(snapshotConfig);
+            if (converted instanceof Map) {
+                baseConfig = castToStringMap((Map<?, ?>) converted);
             }
         }
-        if (options != null) {
-            mergedOptions.putAll(options);
-        }
+        Map<String, Object> mergedOptions = deepMerge(baseConfig, options);
 
         try {
             String percyDomScript = fetchPercyDOM();
@@ -351,6 +353,76 @@ public class Percy {
         }
 
         return postSnapshot(domSnapshot, name, page.url(), options);
+    }
+
+    /**
+     * Recursively converts org.json structures into plain Java collections so
+     * they can be deep-merged. JSONObject -> HashMap, JSONArray -> ArrayList,
+     * JSONObject.NULL -> null, everything else passes through unchanged.
+     */
+    static Object jsonToJava(Object value) {
+        if (value == null || value == JSONObject.NULL) {
+            return null;
+        }
+        if (value instanceof JSONObject) {
+            JSONObject obj = (JSONObject) value;
+            Map<String, Object> map = new HashMap<>();
+            for (String key : obj.keySet()) {
+                map.put(key, jsonToJava(obj.get(key)));
+            }
+            return map;
+        }
+        if (value instanceof JSONArray) {
+            JSONArray arr = (JSONArray) value;
+            List<Object> list = new ArrayList<>();
+            for (int i = 0; i < arr.length(); i++) {
+                list.add(jsonToJava(arr.get(i)));
+            }
+            return list;
+        }
+        return value;
+    }
+
+    /**
+     * Deep-merges {@code override} onto {@code base}. When both sides hold a
+     * Map for the same key, they merge recursively; otherwise the override wins
+     * at the leaf. Arrays and scalars replace wholesale. Null override values
+     * are skipped so unset per-call params do not clobber config values.
+     */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> deepMerge(Map<String, Object> base, Map<String, Object> override) {
+        Map<String, Object> result = new HashMap<>();
+        if (base != null) {
+            result.putAll(base);
+        }
+        if (override == null) {
+            return result;
+        }
+        for (Map.Entry<String, Object> entry : override.entrySet()) {
+            String key = entry.getKey();
+            Object overrideValue = entry.getValue();
+            // A null override (e.g. unset positional param) must not clobber config.
+            if (overrideValue == null) {
+                continue;
+            }
+            Object baseValue = result.get(key);
+            if (baseValue instanceof Map && overrideValue instanceof Map) {
+                result.put(key, deepMerge(
+                        castToStringMap((Map<?, ?>) baseValue),
+                        castToStringMap((Map<?, ?>) overrideValue)));
+            } else {
+                result.put(key, overrideValue);
+            }
+        }
+        return result;
+    }
+
+    private static Map<String, Object> castToStringMap(Map<?, ?> map) {
+        Map<String, Object> result = new HashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            result.put(String.valueOf(entry.getKey()), entry.getValue());
+        }
+        return result;
     }
 
     /**
