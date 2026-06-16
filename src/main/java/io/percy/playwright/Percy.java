@@ -74,6 +74,22 @@ public class Percy {
     }
 
     /**
+     * Override the client info reported to Percy.
+     * Used by framework wrappers (e.g., Cucumber) to identify themselves.
+     */
+    public void setClientInfo(String clientInfo, String environmentInfo) {
+        this.env.setClientInfo(clientInfo);
+        this.env.setEnvironmentInfo(environmentInfo);
+    }
+
+    /**
+     * Get the SDK version string.
+     */
+    public static String getSdkVersion() {
+        return Environment.getSdkVersion();
+    }
+
+    /**
      * Creates a region configuration based on the provided parameters.
      *
      * @param params A map containing the region configuration options. Expected keys:
@@ -389,6 +405,10 @@ public class Percy {
 
         // Build a JSON object to POST back to the agent node process
         JSONObject json = new JSONObject(options);
+        // `readiness` is SDK-local — the CLI already has it via healthcheck.
+        // Strip before posting to avoid round-trip and stay forward-compatible
+        // with future CLI-side validators.
+        json.remove("readiness");
         json.put("url", url);
         json.put("name", name);
         json.put("domSnapshot", domSnapshot);
@@ -436,9 +456,64 @@ public class Percy {
     private String buildSnapshotJS(Map<String, Object> options) {
         StringBuilder jsBuilder = new StringBuilder();
         JSONObject json = new JSONObject(options);
+        // `readiness` is consumed by waitForReady upstream — not a serialize arg.
+        json.remove("readiness");
         jsBuilder.append(String.format("PercyDOM.serialize(%s)\n", json.toString()));
 
         return jsBuilder.toString();
+    }
+
+    /**
+     * Readiness gate: runs PercyDOM.waitForReady BEFORE serialize.
+     *
+     * Config precedence: per-snapshot options["readiness"] is shallow-merged
+     * over cliConfig.snapshot.readiness so a partial per-snapshot override
+     * inherits global keys (notably preset: disabled) instead of dropping
+     * them. If the merged preset is "disabled", skip the evaluate call.
+     *
+     * @return Readiness diagnostics to attach to the domSnapshot, or null.
+     */
+    protected Object waitForReady(Map<String, Object> options) {
+        JSONObject readinessConfig = resolveReadinessConfig(options);
+        if ("disabled".equals(readinessConfig.optString("preset", null))) {
+            return null;
+        }
+        try {
+            String js =
+                "(cfg) => {"
+                + "  if (typeof PercyDOM !== 'undefined' && typeof PercyDOM.waitForReady === 'function') {"
+                + "    return PercyDOM.waitForReady(cfg);"
+                + "  }"
+                + "}";
+            return page.evaluate(js, readinessConfig.toMap());
+        } catch (Exception e) {
+            log("waitForReady failed, proceeding to serialize: " + e.getMessage(), "debug");
+            return null;
+        }
+    }
+
+    /**
+     * Shallow-merge of global (cliConfig.snapshot.readiness) and per-snapshot
+     * (options["readiness"]) readiness config. Per-snapshot keys win; global
+     * keys (notably preset: disabled) inherited.
+     */
+    @SuppressWarnings("unchecked")
+    private JSONObject resolveReadinessConfig(Map<String, Object> options) {
+        JSONObject merged = new JSONObject();
+        JSONObject snapshotConfig = cliConfig == null ? null : cliConfig.optJSONObject("snapshot");
+        JSONObject global = snapshotConfig == null ? null : snapshotConfig.optJSONObject("readiness");
+        if (global != null) {
+            for (String key : global.keySet()) merged.put(key, global.get(key));
+        }
+        Object perSnapshot = options != null ? options.get("readiness") : null;
+        if (perSnapshot instanceof Map) {
+            JSONObject perJson = new JSONObject((Map<String, Object>) perSnapshot);
+            for (String key : perJson.keySet()) merged.put(key, perJson.get(key));
+        } else if (perSnapshot instanceof JSONObject) {
+            JSONObject perJson = (JSONObject) perSnapshot;
+            for (String key : perJson.keySet()) merged.put(key, perJson.get(key));
+        }
+        return merged;
     }
 
     /**
@@ -850,12 +925,20 @@ public class Percy {
             String percyDomScript,
             Map<String, Object> options) {
 
+        // Readiness gate before serialize. Graceful on old CLI.
+        Object readinessDiagnostics = waitForReady(options);
+
         Map<String, Object> domSnapshot =
                 (Map<String, Object>) page.evaluate(buildSnapshotJS(options));
         if (domSnapshot == null) {
             throw new RuntimeException("DOM serialization returned null — PercyDOM.serialize() may not be loaded or returned undefined");
         }
         Map<String, Object> mutableSnapshot = new HashMap<>(domSnapshot);
+
+        // Attach readiness diagnostics so the CLI can log timing and pass/fail
+        if (readinessDiagnostics != null) {
+            mutableSnapshot.put("readiness_diagnostics", readinessDiagnostics);
+        }
 
         // Process cross-origin iframes
         try {
