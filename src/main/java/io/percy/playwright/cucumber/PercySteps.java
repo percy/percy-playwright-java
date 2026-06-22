@@ -82,9 +82,26 @@ public class PercySteps {
     }
 
     private static String getCucumberVersion() {
+        return resolveVersion(new java.util.concurrent.Callable<String>() {
+            @Override
+            public String call() {
+                Package pkg = io.cucumber.java.en.Given.class.getPackage();
+                return pkg != null ? pkg.getImplementationVersion() : null;
+            }
+        });
+    }
+
+    /**
+     * Resolves a version string from a supplier, defaulting to {@code "unknown"}
+     * when the supplier returns {@code null} or throws.
+     *
+     * <p>The version lookup is supplied via a {@link java.util.concurrent.Callable}
+     * seam so the fallback/catch path can be exercised by a unit test that provides
+     * a throwing supplier. Behavior is identical in production.</p>
+     */
+    static String resolveVersion(java.util.concurrent.Callable<String> versionSupplier) {
         try {
-            Package pkg = io.cucumber.java.en.Given.class.getPackage();
-            String version = pkg != null ? pkg.getImplementationVersion() : null;
+            String version = versionSupplier.call();
             return version != null ? version : "unknown";
         } catch (Exception e) {
             return "unknown";
