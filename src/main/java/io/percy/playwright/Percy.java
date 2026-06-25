@@ -839,6 +839,117 @@ public class Percy {
     // -------------------------------------------------------------------------
 
     /**
+     * Resolves the list of iframe-ignore CSS selectors for this snapshot.
+     *
+     * <p>Mirrors the JS SDK's {@code resolveIgnoreSelectors(options)}: per-snapshot
+     * {@code options.ignoreIframeSelectors} (falling back to {@code options.ignoreSelectors})
+     * takes precedence; if absent, the global {@code cliConfig.snapshot.ignoreIframeSelectors}
+     * is used. The value is normalized to a {@code List<String>} of non-empty strings.
+     * A single string is wrapped in a one-element list. Any other type (or a missing
+     * value) yields an empty list, which makes the filter a no-op.</p>
+     */
+    @SuppressWarnings("unchecked")
+    List<String> resolveIgnoreSelectors(Map<String, Object> options) {
+        Object sel = null;
+        if (options != null) {
+            sel = options.get("ignoreIframeSelectors");
+            if (sel == null) { sel = options.get("ignoreSelectors"); }
+        }
+        // Fall back to global config (cliConfig.snapshot.ignoreIframeSelectors)
+        if (sel == null && cliConfig != null && cliConfig.has("snapshot")
+                && !cliConfig.isNull("snapshot")) {
+            JSONObject snapshotConfig = cliConfig.optJSONObject("snapshot");
+            if (snapshotConfig != null && snapshotConfig.has("ignoreIframeSelectors")
+                    && !snapshotConfig.isNull("ignoreIframeSelectors")) {
+                Object configSel = snapshotConfig.get("ignoreIframeSelectors");
+                if (configSel instanceof JSONArray) {
+                    List<String> out = new ArrayList<>();
+                    JSONArray arr = (JSONArray) configSel;
+                    for (int i = 0; i < arr.length(); i++) {
+                        Object v = arr.opt(i);
+                        if (v instanceof String && !((String) v).isEmpty()) { out.add((String) v); }
+                    }
+                    return out;
+                } else if (configSel instanceof String) {
+                    return Collections.singletonList((String) configSel);
+                }
+                return new ArrayList<>();
+            }
+        }
+
+        if (sel == null) { return new ArrayList<>(); }
+        if (sel instanceof List) {
+            List<String> out = new ArrayList<>();
+            for (Object v : (List<Object>) sel) {
+                if (v instanceof String && !((String) v).isEmpty()) { out.add((String) v); }
+            }
+            return out;
+        }
+        if (sel instanceof String) {
+            return Collections.singletonList((String) sel);
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * Reads the {@code data-percy-ignore} attribute and ignore-selector match
+     * state of a cross-origin frame's {@code <iframe>} element from its PARENT
+     * frame's DOM (where the element lives), mirroring the JS SDK.
+     *
+     * <p>The lookup matches the iframe by exact {@code src} first, then by a
+     * trailing-slash-normalized comparison. Invalid selectors are swallowed
+     * (per the JS {@code try/catch} around {@code el.matches}). Returns a map
+     * with boolean keys {@code dataPercyIgnore} and {@code matchesIgnoreSelector};
+     * on any failure both default to {@code false} (frame is captured).</p>
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> resolveIframeIgnoreFlags(Frame frame, List<String> ignoreSelectors) {
+        Map<String, Object> defaults = new HashMap<>();
+        defaults.put("dataPercyIgnore", false);
+        defaults.put("matchesIgnoreSelector", false);
+        try {
+            Frame parent = frame.parentFrame();
+            // For a top-level iframe the <iframe> element lives in the main page;
+            // page.evaluate has the same signature so the lookup still works.
+            Object evalTarget = parent != null ? parent : page;
+
+            String js =
+                    "({ fUrl, selectors }) => {" +
+                    "  const norm = (s) => (s || '').replace(/\\/+$/, '');" +
+                    "  const target = norm(fUrl);" +
+                    "  const iframes = Array.from(document.querySelectorAll('iframe'));" +
+                    "  const el = iframes.find(i => i.src === fUrl) || iframes.find(i => norm(i.src) === target);" +
+                    "  if (!el) { return { dataPercyIgnore: false, matchesIgnoreSelector: false }; }" +
+                    "  let matches = false;" +
+                    "  if (selectors && selectors.length) {" +
+                    "    for (let j = 0; j < selectors.length; j++) {" +
+                    "      try { if (el.matches(selectors[j])) { matches = true; break; } } catch (e) { /* invalid */ }" +
+                    "    }" +
+                    "  }" +
+                    "  return {" +
+                    "    dataPercyIgnore: el.hasAttribute('data-percy-ignore')," +
+                    "    matchesIgnoreSelector: matches" +
+                    "  };" +
+                    "}";
+
+            Map<String, Object> arg = new HashMap<>();
+            arg.put("fUrl", frame.url());
+            arg.put("selectors", ignoreSelectors);
+
+            Object flags;
+            if (parent != null) {
+                flags = parent.evaluate(js, arg);
+            } else {
+                flags = page.evaluate(js, arg);
+            }
+            if (flags instanceof Map) { return (Map<String, Object>) flags; }
+            return defaults;
+        } catch (Exception e) {
+            return defaults;
+        }
+    }
+
+    /**
      * Returns {@code true} if any ancestor of {@code frame} is itself in the
      * provided set of known cross-origin frames. Used to dedupe descendants of
      * a CORS frame whose serialization is handled inside its top-level CORS
@@ -963,6 +1074,10 @@ public class Percy {
             URI pageUri = new URI(page.url());
             String pageHost = pageUri.getHost();
 
+            // Resolve iframe-ignore selectors once for this snapshot. Per-snapshot
+            // options take precedence over the global config (matches JS).
+            List<String> ignoreSelectors = resolveIgnoreSelectors(options);
+
             // Option A (chosen): walk the full page.frames() tree but skip any
             // frame whose nearest cross-origin ancestor frame is *already* in
             // our result set. This guarantees:
@@ -984,10 +1099,23 @@ public class Percy {
                         if (pageHost == null) { return false; }
                         try {
                             String frameHost = new URI(fUrl).getHost();
-                            return frameHost != null && !Objects.equals(frameHost, pageHost);
+                            if (frameHost == null || Objects.equals(frameHost, pageHost)) { return false; }
                         } catch (Exception e) {
                             return false;
                         }
+                        // Honor data-percy-ignore and ignoreIframeSelectors on the
+                        // iframe element (read from the parent frame's DOM) BEFORE
+                        // the expensive switch/serialize. Mirrors the JS SDK.
+                        Map<String, Object> ignoreFlags = resolveIframeIgnoreFlags(f, ignoreSelectors);
+                        if (Boolean.TRUE.equals(ignoreFlags.get("dataPercyIgnore"))) {
+                            log("Skipping iframe marked with data-percy-ignore: " + fUrl, "debug");
+                            return false;
+                        }
+                        if (Boolean.TRUE.equals(ignoreFlags.get("matchesIgnoreSelector"))) {
+                            log("Skipping iframe matching ignoreIframeSelectors: " + fUrl, "debug");
+                            return false;
+                        }
+                        return true;
                     })
                     .collect(Collectors.toList());
 
