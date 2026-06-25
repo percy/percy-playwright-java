@@ -50,6 +50,16 @@
             <artifactId>playwright</artifactId>
             <version>1.44.0</version>
         </dependency>
+        <!-- Declared explicitly: Percy.java imports com.google.gson.* directly
+             for CDP DOM-tree parsing. It currently resolves transitively via
+             Playwright, but a direct source dependency must be declared so a
+             Playwright upgrade cannot silently break compilation. Version kept
+             in sync with the one Playwright 1.44.0 brings in. -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
