@@ -554,6 +554,90 @@ public class SDKTest {
         assertNull(result.get("readiness_diagnostics"));
     }
 
+    // -------------------------------------------------------------------------
+    // .percy.yml config <-> per-snapshot merge precedence
+    // -------------------------------------------------------------------------
+
+    /**
+     * cliConfig.snapshot supplies a config-only key (enableJavaScript) and a
+     * percyCSS value. The per-snapshot call also supplies percyCSS. The merged
+     * options handed to PercyDOM.serialize(...) must:
+     *   - retain the config-only key (enableJavaScript = true), and
+     *   - let the per-snapshot percyCSS ("FROM_CALL") win over the config value.
+     */
+    @Test
+    @Order(93)
+    @SuppressWarnings("unchecked")
+    public void perSnapshotOptionsOverrideConfigInSerializedOptions() throws Exception {
+        Page mockPage = Mockito.mock(Page.class);
+        BrowserContext mockContext = Mockito.mock(BrowserContext.class);
+
+        // Serialize path: single-arg evaluate(PercyDOM.serialize({...})) returns the DOM
+        Map<String, Object> domMap = new HashMap<>();
+        domMap.put("html", "<html></html>");
+        when(mockPage.evaluate(anyString())).thenReturn(domMap);
+        when(mockPage.url()).thenReturn("http://example.com");
+        when(mockPage.frames()).thenReturn(new ArrayList<>());
+        when(mockPage.context()).thenReturn(mockContext);
+        when(mockContext.cookies()).thenReturn(new ArrayList<>());
+
+        Percy percyInstance = spy(new Percy(mockPage));
+        percyInstance.sessionType = "web";
+
+        // Force Percy enabled and pre-seed the cached dom.js so no HTTP calls fire
+        setPrivateField(percyInstance, "isPercyEnabled", true);
+        setPrivateField(percyInstance, "domJs", "// percy dom script");
+
+        // Don't actually POST anything back to the CLI
+        doReturn(null).when(percyInstance).request(anyString(), any(JSONObject.class), anyString());
+
+        // Inject .percy.yml config: config-only enableJavaScript + percyCSS from config
+        JSONObject snapshotConfig = new JSONObject();
+        snapshotConfig.put("enableJavaScript", true);
+        snapshotConfig.put("percyCSS", "FROM_CONFIG");
+        JSONObject config = new JSONObject();
+        config.put("snapshot", snapshotConfig);
+        percyInstance.cliConfig = config;
+
+        // Per-call options override percyCSS only
+        Map<String, Object> options = new HashMap<>();
+        options.put("percyCSS", "FROM_CALL");
+
+        percyInstance.snapshot("merge-precedence", options);
+
+        // Capture the JS string passed to the single-arg serialize evaluate
+        ArgumentCaptor<String> jsCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockPage, atLeastOnce()).evaluate(jsCaptor.capture());
+
+        String serializeJs = null;
+        for (String js : jsCaptor.getAllValues()) {
+            if (js != null && js.contains("PercyDOM.serialize(")) {
+                serializeJs = js;
+                break;
+            }
+        }
+        assertNotNull(serializeJs, "PercyDOM.serialize(...) call should have been made");
+
+        // Parse the JSON argument out of PercyDOM.serialize({...})
+        int start = serializeJs.indexOf('{');
+        int end = serializeJs.lastIndexOf('}');
+        assertTrue(start >= 0 && end > start, "serialize JS should contain a JSON object argument");
+        JSONObject serializedOptions = new JSONObject(serializeJs.substring(start, end + 1));
+
+        // Config-only key survives the merge
+        assertTrue(serializedOptions.has("enableJavaScript"), "config-only enableJavaScript should be merged in");
+        assertTrue(serializedOptions.getBoolean("enableJavaScript"), "enableJavaScript should be true from config");
+        // Per-call value wins over config value
+        assertEquals("FROM_CALL", serializedOptions.getString("percyCSS"),
+                "per-snapshot percyCSS must override the .percy.yml config value");
+    }
+
+    private static void setPrivateField(Object target, String name, Object value) throws Exception {
+        java.lang.reflect.Field field = Percy.class.getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
     @Test
     @Order(92)
     @SuppressWarnings("unchecked")
@@ -578,6 +662,42 @@ public class SDKTest {
         // domSnapshot was still built; no diagnostics attached
         assertNull(result.get("readiness_diagnostics"));
         assertEquals("<html></html>", result.get("html"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void deepMergesConfigWithPerCallOptions() {
+        // Simulate cliConfig.snapshot with a nested discovery block.
+        JSONObject snapshotConfig = new JSONObject();
+        JSONObject discovery = new JSONObject();
+        discovery.put("networkIdleTimeout", 50);
+        discovery.put("disableCache", false);
+        snapshotConfig.put("discovery", discovery);
+        snapshotConfig.put("widths", new org.json.JSONArray(Arrays.asList(375, 1280)));
+
+        Object base = Percy.jsonToJava(snapshotConfig);
+        assertTrue(base instanceof Map);
+
+        // Per-call options: override only one nested leaf + a null that must not clobber.
+        Map<String, Object> perCallDiscovery = new HashMap<>();
+        perCallDiscovery.put("disableCache", true);
+        Map<String, Object> options = new HashMap<>();
+        options.put("discovery", perCallDiscovery);
+        options.put("scope", null); // null per-call value must be skipped
+
+        Map<String, Object> merged = Percy.deepMerge((Map<String, Object>) base, options);
+
+        // Nested discovery is deep-merged: per-call wins at disableCache, config kept for networkIdleTimeout.
+        Map<String, Object> mergedDiscovery = (Map<String, Object>) merged.get("discovery");
+        assertEquals(50, mergedDiscovery.get("networkIdleTimeout"));
+        assertEquals(true, mergedDiscovery.get("disableCache"));
+
+        // Arrays/scalars from config survive when not overridden.
+        assertTrue(merged.get("widths") instanceof List);
+        assertEquals(Arrays.asList(375, 1280), merged.get("widths"));
+
+        // Null per-call value did not clobber and did not add the key.
+        assertFalse(merged.containsKey("scope"));
     }
 
 }
