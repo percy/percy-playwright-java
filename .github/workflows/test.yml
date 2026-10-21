@@ -11,9 +11,11 @@ jobs:
   test:
     name: Test
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         java: [8, 11, 17, 21]
+        playwright: [1.44.0, 1.63.0]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions-ecosystem/action-regex-match@v2
@@ -52,6 +54,6 @@ jobs:
           cd ${{ github.workspace }} 
           yarn remove @percy/cli && yarn link `echo $PERCY_PACKAGES`
           npx percy --version
-      - run: MOZ_HEADLESS=1 npx percy exec -- mvn test
+      - run: MOZ_HEADLESS=1 npx percy exec -- mvn test -Dplaywright.version=${{ matrix.playwright }}
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}

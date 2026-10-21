@@ -42,13 +42,15 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.jupiter.version>5.9.2</junit.jupiter.version>
+        <!-- Published floor; CI also tests the latest Playwright via -Dplaywright.version. -->
+        <playwright.version>1.44.0</playwright.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>com.microsoft.playwright</groupId>
             <artifactId>playwright</artifactId>
-            <version>1.63.0</version>
+            <version>${playwright.version}</version>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
