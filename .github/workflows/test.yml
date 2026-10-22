@@ -15,7 +15,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         java: [8, 11, 17, 21]
-        playwright: [1.44.0, 1.63.0]
+        playwright: ['1.44.0', '1.63.0']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions-ecosystem/action-regex-match@v2
